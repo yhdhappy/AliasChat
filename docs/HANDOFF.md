@@ -17,7 +17,7 @@ VeilAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用�
 ## 当前进度
 - [x] Phase 0 验货：仓库真实、MIT 确认、npm test 通过、机制读懂
 - [x] 仓库建立 + 代码推送（2026-10-04 凌晨）
-- [ ] Logo 原图 → 切 16/32/48/128（等达叔发图）
+- [x] Logo：第 1 方案（盾牌+气泡+面纱），已切 16/32/48/128 换进 extension/icons/，原图存 brand/veilAI-logo-original.png（2026-10-04 早）
 - [ ] Phase 1：品牌重命名（manifest/README/store listing）、去 Turkish（TCKN/PLATE/土耳其地址姓名模式）、英文打磨
 - [ ] Phase 2：物料（截图、商店描述）
 - [ ] Phase 3：Gumroad 上架 + license 验证接入
