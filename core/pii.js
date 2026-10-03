@@ -26,13 +26,6 @@
     return sum % 10 === 0;
   };
 
-  const tckn = s => {
-    const d = [...s].map(Number);
-    const odd = d[0] + d[2] + d[4] + d[6] + d[8];
-    const even = d[1] + d[3] + d[5] + d[7];
-    return (((odd * 7 - even) % 10) + 10) % 10 === d[9] && d.slice(0, 10).reduce((a, b) => a + b) % 10 === d[10];
-  };
-
   const iban = s => {
     const t = s.replace(/ /g, '');
     let rem = 0;
@@ -50,26 +43,22 @@
     ['EMAIL', /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g],
     ['IBAN', /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/g, iban],
     ['CARD', /\b[2-6]\d{14,15}\b|\b[2-6]\d{3}(?:[ -]\d{4}){3}\b|\b[2-6]\d{3}[ -]\d{6}[ -]\d{5}\b/g, luhn],
-    ['TCKN', /\b[1-9]\d{10}\b/g, tckn],
     ['SSN', /\b\d{3}-\d{2}-\d{4}\b/g],
-    ['PHONE', /(?:\+|\b00)\d{1,3}[ .-]?\(?\d{1,4}\)?(?:[ .-]?\d{2,4}){2,4}\b|\b0\d{3}[ .-]?\d{3}[ .-]?\d{2}[ .-]?\d{2}\b|\(\d{3}\)[ .-]?\d{3}[ .-]?\d{4}\b|\b\d{3}[.-]\d{3}[.-]\d{4}\b|\b0\d{4} ?\d{6}\b/g],
-    ['ADDRESS', /(?<![\p{L}_])(?:address|addr|street[ _-]?address|billing[ _-]?address|shipping[ _-]?address|home[ _-]?address|adres|ev[ _-]?adresi)\s*["']?\s*[:=]\s*["']?([^\n"']{8,120}?)\s*(?=[\n"']|$)/giu, addressLike],
-    ['ADDRESS', /\b\d{1,5}[A-Za-z]?\s+(?:[A-Z][a-z]+\.?\s+){1,3}(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Way|Place|Pl|Highway|Hwy|Parkway|Pkwy)\b\.?(?:,?\s*(?:Apt|Suite|Ste|Unit|Floor|Fl|#)\.?\s*[\w-]+)?(?:,\s*[A-Z][a-z]+(?:\s[A-Z][a-z]+)*)?(?:,?\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?|\s+[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})?|\bP\.?O\.?\s*Box\s+\d+\b|\bPosta Kutusu\s*\d+\b/g],
-    ['ADDRESS', /(?<!\p{L})\p{Lu}[\p{L}.]+(?:\s+\p{Lu}[\p{L}.]+)*\s+(?:Mah\.?|Mahallesi|Mh\.|Cad\.?|Caddesi|Cd\.|Sok\.?|Sokak|Sk\.|Bulvarı|Blv\.)[^\n]{0,80}?No:?\s*\d+[A-Za-z]?(?:[ /,-]*(?:Daire|Kat|D|K)\.?:?\s*\d+)*(?:[ ,]*\p{Lu}\p{L}+\s*\/\s*\p{Lu}\p{L}+)?/gu],
-    ['DOB', /(?<![\p{L}_])(?:dob|date of birth|birth ?date|born(?: on)?|doğum tarihi|d\.?t\.?)\s*["']?\s*[:=]?\s*["']?(\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}-\d{2}-\d{2})/giu],
-    ['ID', /(?<![\p{L}_])(?:passport(?: no| number)?|pasaport(?: no)?|kimlik(?: no)?|id(?: number| no)|national id|driver'?s licen[cs]e|ehliyet(?: no)?|sürücü belgesi)\s*["']?\s*[:=]?\s*["']?([A-Z]{0,2}\d{6,11}[A-Z]?)(?![\d\p{L}])/giu],
-    ['PLATE', /\b(?:0[1-9]|[1-7]\d|8[01]) [A-Z]{1,3} \d{2,4}\b/g],
+    ['PHONE', /(?:\+|\b00)\d{1,3}[ .-]?\(?\d{1,4}\)?(?:[ .-]?\d{2,4}){2,4}\b|\(\d{3}\)[ .-]?\d{3}[ .-]?\d{4}\b|\b\d{3}[.-]\d{3}[.-]\d{4}\b|\b0\d{4} ?\d{6}\b/g],
+    ['ADDRESS', /(?<![\p{L}_])(?:address|addr|street[ _-]?address|billing[ _-]?address|shipping[ _-]?address|home[ _-]?address)\s*["']?\s*[:=]\s*["']?([^\n"']{8,120}?)\s*(?=[\n"']|$)/giu, addressLike],
+    ['ADDRESS', /\b\d{1,5}[A-Za-z]?\s+(?:[A-Z][a-z]+\.?\s+){1,3}(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Way|Place|Pl|Highway|Hwy|Parkway|Pkwy)\b\.?(?:,?\s*(?:Apt|Suite|Ste|Unit|Floor|Fl|#)\.?\s*[\w-]+)?(?:,\s*[A-Z][a-z]+(?:\s[A-Z][a-z]+)*)?(?:,?\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?|\s+[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})?|\bP\.?O\.?\s*Box\s+\d+\b/g],
+    ['DOB', /(?<![\p{L}_])(?:dob|date of birth|birth ?date|born(?: on)?|d\.?t\.?)\s*["']?\s*[:=]?\s*["']?(\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}-\d{2}-\d{2})/giu],
+    ['ID', /(?<![\p{L}_])(?:passport(?: no| number)?|id(?: number| no)|national id|driver'?s licen[cs]e)\s*["']?\s*[:=]?\s*["']?([A-Z]{0,2}\d{6,11}[A-Z]?)(?![\d\p{L}])/giu],
     ['IP', /(?<!version\s)(?<!\bv)\b(?!(?:10|127|0)\.)(?!192\.168\.)(?!172\.(?:1[6-9]|2\d|3[01])\.)(?!169\.254\.)(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/g],
-    ['NAME', /(?<!\p{L})(?:[Mm]y name is|I am|I'm|[Dd]ear|[Rr]egards|[Ss]incerely|[Bb]est regards|[Kk]ind regards|[Cc]heers|[Bb]enim adım|[Bb]en|[Mm]erhaba|[Ss]aygılar(?:ımla)?|[Ss]evgiler)\s*,?\s+(\p{Lu}\p{Ll}+(?:\s+\p{Lu}\p{Ll}+){1,2})/gu],
-    ['NAME', /(?<!\p{L})(?:Mr|Mrs|Ms|Miss|Dr|Prof|Sayın|Sn|Bay|Bayan)\.?\s+(\p{Lu}\p{Ll}+(?:\s+\p{Lu}\p{Ll}+){0,2})/gu],
-    ['NAME', /(?<![\p{L}_])(?:first[ _-]?name|last[ _-]?name|given[ _-]?name|family[ _-]?name|surname|ad|soyad)\s*["']?\s*[:=]\s*["']?([^\n,;"']{2,60}?)\s*(?=[\n,;"']|$)/giu, personLike],
-    ['NAME', /(?<![\p{L}_])(?:full[ _-]?name|customer(?:[ _-]?name)?|contact(?:[ _-]?name)?|owner|patient|employee|name|ad[ _-]?soyad|adı[ _-]?soyadı|isim|müşteri|hasta)\s*["']?\s*[:=]\s*["']?([^\n,;"']{2,60}?)\s*(?=[\n,;"']|$)/giu, fullNameLike]
+    ['NAME', /(?<!\p{L})(?:[Mm]y name is|I am|I'm|[Dd]ear|[Rr]egards|[Ss]incerely|[Bb]est regards|[Kk]ind regards|[Cc]heers)\s*,?\s+(\p{Lu}\p{Ll}+(?:\s+\p{Lu}\p{Ll}+){1,2})/gu],
+    ['NAME', /(?<!\p{L})(?:Mr|Mrs|Ms|Miss|Dr|Prof)\.?\s+(\p{Lu}\p{Ll}+(?:\s+\p{Lu}\p{Ll}+){0,2})/gu],
+    ['NAME', /(?<![\p{L}_])(?:first[ _-]?name|last[ _-]?name|given[ _-]?name|family[ _-]?name|surname)\s*["']?\s*[:=]\s*["']?([^\n,;"']{2,60}?)\s*(?=[\n,;"']|$)/giu, personLike],
+    ['NAME', /(?<![\p{L}_])(?:full[ _-]?name|customer(?:[ _-]?name)?|contact(?:[ _-]?name)?|owner|patient|employee|name)\s*["']?\s*[:=]\s*["']?([^\n,;"']{2,60}?)\s*(?=[\n,;"']|$)/giu, fullNameLike]
   ];
-  const FOLD = { i: ['[Iİ]', '[iı]'], s: ['[SŞ]', '[sş]'], c: ['[CÇ]', '[cç]'], g: ['[GĞ]', '[gğ]'], o: ['[OÖ]', '[oö]'], u: ['[UÜ]', '[uü]'] };
   const nameForms = t => {
     const l = [...t.toLowerCase()];
-    const upper = l.map(ch => FOLD[ch] ? FOLD[ch][0] : ch.toUpperCase()).join('');
-    const cap = l.map((ch, i) => FOLD[ch] ? FOLD[ch][i ? 1 : 0] : i ? ch : ch.toUpperCase()).join('');
+    const upper = l.map(ch => ch.toUpperCase()).join('');
+    const cap = l.map((ch, i) => i ? ch : ch.toUpperCase()).join('');
     return `(?:${cap}|${upper})`;
   };
   const TYPES = [...new Set(PATTERNS.map(p => p[0]))];
@@ -112,5 +101,5 @@
     : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, deepMap(x, fn)]))
     : v;
 
-  return { mask, unmask, luhn, tckn, iban, hasPlaceholder, deepMap, PLACEHOLDER, TYPES, configure };
+  return { mask, unmask, luhn, iban, hasPlaceholder, deepMap, PLACEHOLDER, TYPES, configure };
 });

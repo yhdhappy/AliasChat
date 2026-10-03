@@ -17,7 +17,7 @@
     const el = document.createElement('div');
     el.setAttribute('data-mask2ai', '');
     el.style.cssText = style + 'right:16px;bottom:16px;';
-    el.textContent = '🛡 mask2ai: ' + text;
+    el.textContent = '🛡 VeilAI: ' + text;
     (document.body || document.documentElement).appendChild(el);
     if (ms) setTimeout(() => el.remove(), ms);
   };

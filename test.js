@@ -3,7 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { mask, unmask, luhn, tckn, iban, configure, TYPES } = require('./core/pii.js');
+const { mask, unmask, luhn, iban, configure, TYPES } = require('./core/pii.js');
 const { isChatRequest, rewrite } = require('./extension/rewrite.js');
 const zip = require('./core/zip.js');
 const office = require('./core/office.js');
@@ -11,36 +11,34 @@ const files = require('./extension/files.js');
 
 assert(luhn('4111 1111 1111 1111'));
 assert(!luhn('1234 5678 9012 3456'));
-assert(tckn('10000000146'));
-assert(!tckn('12345678901'));
 assert(iban('GB82 WEST 1234 5698 7654 32'));
 assert(iban('TR330006100519786457841326'));
 assert(!iban('GB00 WEST 1234 5698 7654 32'));
 
-const text = 'Mail ali@example.com or +90 532 123 45 67, card 4111 1111 1111 1111, id 10000000146, ssn 123-45-6789, iban GB82 WEST 1234 5698 7654 32, ts 1758200000000 v1.2.3 port 8080';
+const text = 'Mail ali@example.com or +1 555 555 5555, card 4111 1111 1111 1111, ssn 123-45-6789, iban GB82 WEST 1234 5698 7654 32, ts 1758200000000 v1.2.3 port 8080';
 const found = {};
 const masked = mask(text, found);
-assert(!/example\.com|532|4111|10000000146|123-45|WEST/.test(masked), masked);
+assert(!/example\.com|555 5555|4111|123-45|WEST/.test(masked), masked);
 assert(/1758200000000 v1\.2\.3 port 8080$/.test(masked), masked);
-assert.strictEqual(Object.keys(found).length, 6);
+assert.strictEqual(Object.keys(found).length, 5);
 assert.strictEqual(unmask(masked, found), text);
 assert.strictEqual(mask(text, {}), masked);
 
 const pii = [
-  "Dr. Ayşe Yılmaz will call.\nname: John Smith\n\"firstName\": \"Veli\"\naddress: 123 Main St, Springfield, IL 62704\nAtatürk Mah. Cumhuriyet Cad. No:12 D:3 Kadıköy/İstanbul\nmail ali.yilmaz@x.com, Ali Yılmaz signed, cc ALI YILMAZ.",
-  "name: mask2ai\nversion: 1.2.3\nusername: serkan\naddress: 0x7fffdeadbeef\nhostname: Claude Code\nSee 42 Ways To Go\nBind address: 192.168.1.10"
+  "Dr. Jane Smith will call.\nname: John Smith\n\"firstName\": \"Veli\"\naddress: 123 Main St, Springfield, IL 62704\nmail ali.yilmaz@x.com, Ali Yilmaz signed, cc ALI YILMAZ.",
+  "name: VeilAI\nversion: 1.2.3\nusername: serkan\naddress: 0x7fffdeadbeef\nhostname: Claude Code\nSee 42 Ways To Go\nBind address: 192.168.1.10"
 ];
 const f2 = {};
 const m2 = mask(pii[0], f2);
-for (const s of ["Ayşe Yılmaz", "John Smith", "Veli", "123 Main St, Springfield, IL 62704", "Atatürk Mah. Cumhuriyet Cad. No:12 D:3 Kadıköy/İstanbul", "Ali Yılmaz", "ALI YILMAZ", "ali.yilmaz@x.com"]) assert(!m2.includes(s), s + " leaked: " + m2);
+for (const s of ["Jane Smith", "John Smith", "Veli", "123 Main St, Springfield, IL 62704", "Ali Yilmaz", "ALI YILMAZ", "ali.yilmaz@x.com"]) assert(!m2.includes(s), s + " leaked: " + m2);
 assert(m2.includes("will call.") && m2.includes("signed, cc"), m2);
 assert.strictEqual(unmask(m2, f2), pii[0]);
 assert.strictEqual(mask(pii[1], {}), pii[1]);
 
-const csv = "id,first_name,last_name,email,address\n1,Ayşe,Yılmaz,ayse.yilmaz@mail.com,\"Bağdat Cad. No:5 D:2 Kadıköy/İstanbul\"\nMeet at 221B Baker Street, London NW1 6XE.";
+const csv = "id,first_name,last_name,email,address\n1,Jane,Smith,jane.smith@mail.com,\"221B Baker Street, London NW1 6XE\"\nMeet at 221B Baker Street, London NW1 6XE.";
 const f3 = {};
 const m3 = mask(csv, f3);
-for (const s of ["Ayşe", "Yılmaz", "ayse.yilmaz", "Bağdat Cad. No:5 D:2 Kadıköy/İstanbul", "221B Baker Street, London NW1 6XE"]) assert(!m3.includes(s), s + " leaked: " + m3);
+for (const s of ["Jane", "Smith", "jane.smith", "221B Baker Street, London NW1 6XE"]) assert(!m3.includes(s), s + " leaked: " + m3);
 assert(m3.startsWith("id,first_name,last_name,email,address\n1,__PII_NAME_") && m3.includes("__,\"__PII_ADDRESS_") && m3.endsWith("__."), m3);
 assert.strictEqual(unmask(m3, f3), csv);
 assert.strictEqual(mask("Can you help Deniz? mail: deniz.can@x.com is fine", {}).split("__PII_").length, 4);
@@ -49,10 +47,10 @@ for (const s of ["{\"name\": \"Bash\", \"id\": 3}", "name: Widget", "owner: Dock
 assert(!mask("{\"name\": \"Jane Doe\"}", {}).includes("Jane Doe"));
 assert(!mask("firstName: Jane", {}).includes("Jane"));
 
-const extra = "DOB: 12/03/1988, doğum tarihi: 12.03.1988, passport no: U12345678, kimlik no 12345678901, plaka 34 ABC 123, from 85.105.23.11, local 192.168.1.10 and 10.0.0.1 and 127.0.0.1, version 1.2.3.4 is not an ip";
+const extra = "DOB: 12/03/1988, passport no: U12345678, from 85.105.23.11, local 192.168.1.10 and 10.0.0.1 and 127.0.0.1, version 1.2.3.4 is not an ip";
 const fx = {};
 const mx = mask(extra, fx);
-for (const s of ["12/03/1988", "12.03.1988", "U12345678", "12345678901", "34 ABC 123", "85.105.23.11"]) assert(!mx.includes(s), s + " leaked: " + mx);
+for (const s of ["12/03/1988", "U12345678", "85.105.23.11"]) assert(!mx.includes(s), s + " leaked: " + mx);
 for (const s of ["192.168.1.10", "10.0.0.1", "127.0.0.1"]) assert(mx.includes(s), s + " wrongly masked: " + mx);
 assert(mx.includes("version 1.2.3.4"), mx);
 assert.strictEqual(unmask(mx, fx), extra);
@@ -130,10 +128,10 @@ assert(/^call __PII_PHONE_[0-9a-f]{6}__$/.test(gptBody.messages[0].content.parts
   console.log("office ok");
 })().catch(e => { console.error(e); process.exit(1); });
 
-assert.deepStrictEqual(TYPES, ["EMAIL", "IBAN", "CARD", "TCKN", "SSN", "PHONE", "ADDRESS", "DOB", "ID", "PLATE", "IP", "NAME"]);
-configure({ disable: ["tckn", "PLATE"], allow: ["support@acme.com"], extra: [{ type: "employee id", pattern: "EMP-\\d{6}" }] });
-const mc = mask("id 10000000146, plate 34 ABC 123, mail support@acme.com and jane.doe@example.com, badge EMP-123456", {});
-assert(mc.includes("10000000146") && mc.includes("34 ABC 123") && mc.includes("support@acme.com"), mc);
+assert.deepStrictEqual(TYPES, ["EMAIL", "IBAN", "CARD", "SSN", "PHONE", "ADDRESS", "DOB", "ID", "IP", "NAME"]);
+configure({ disable: ["SSN"], allow: ["support@acme.com"], extra: [{ type: "employee id", pattern: "EMP-\\d{6}" }] });
+const mc = mask("ssn 123-45-6789, mail support@acme.com and jane.doe@example.com, badge EMP-123456", {});
+assert(mc.includes("123-45-6789") && mc.includes("support@acme.com"), mc);
 assert(!mc.includes("jane.doe") && /__PII_EMPLOYEEID_[0-9a-f]{6}__/.test(mc), mc);
 configure({ disable: ["NAME"] });
 assert(mask("Dr. Jane Doe and jane.doe@example.com", {}).includes("Jane Doe"));
@@ -162,8 +160,8 @@ const post = run({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_respo
 const ph = post.hookSpecificOutput.updatedToolOutput.stdout.trim().split(' ')[1];
 assert(/^__PII_EMAIL_[0-9a-f]{6}__$/.test(ph), ph);
 assert.deepStrictEqual(Object.keys(post.hookSpecificOutput.updatedToolOutput), ['stdout', 'stderr', 'interrupted', 'isImage']);
-assert.strictEqual(post.systemMessage, 'mask2ai: masked 1 value in Bash output');
-assert(run({ hook_event_name: 'SessionStart', source: 'startup' }).systemMessage.startsWith('mask2ai active'));
+assert.strictEqual(post.systemMessage, 'VeilAI: masked 1 value in Bash output');
+assert(run({ hook_event_name: 'SessionStart', source: 'startup' }).systemMessage.startsWith('VeilAI active'));
 assert.strictEqual(run({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_response: { stdout: 'clean\n', stderr: '' } }), null);
 
 assert.strictEqual(run({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'ls' } }), null);

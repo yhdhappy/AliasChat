@@ -1,11 +1,11 @@
 {
-  "name": "mask2ai",
+  "name": "veil-ai",
   "version": "0.6.0",
   "description": "Masks personal data before it reaches an AI assistant. Claude Code plugin and Chrome extension for claude.ai and ChatGPT.",
   "private": true,
   "license": "MIT",
   "author": "Serkan Korkut",
-  "repository": "github:serkankorkut/mask2ai",
+  "repository": "github:yhdhappy/veilAI",
   "engines": {
     "node": ">=18"
   },

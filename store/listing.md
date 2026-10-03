@@ -2,7 +2,7 @@
 
 ## Name
 
-mask2ai
+VeilAI
 
 ## Summary (132 characters max)
 
@@ -10,24 +10,24 @@ Masks names, emails, phone, card and ID numbers before your message reaches clau
 
 ## Description
 
-mask2ai keeps personal data on your machine when you talk to an AI.
+VeilAI keeps personal data on your machine when you talk to an AI.
 
 Before a message leaves claude.ai or chatgpt.com, the extension finds email addresses, phone numbers, payment cards, IBANs, national ID and social security numbers, dates of birth, names and street addresses in it and replaces each with a placeholder. The model only ever sees placeholders. The reply comes back with the same placeholders and the page shows you the real values.
 
 - Runs entirely in the page. No server, no account, no telemetry.
 - A toast tells you how many values were masked each time you send.
-- Card numbers are Luhn-checked, IBANs mod-97-checked and Turkish ID numbers checksum-checked, so timestamps and version numbers are left alone.
-- English and Turkish formats.
+- Card numbers are Luhn-checked and IBANs mod-97-checked, so timestamps and version numbers are left alone.
+- Detectors target common English-language labels and formats.
 - The placeholder map lives in the tab and disappears when you close it.
-- Open source, MIT: https://github.com/serkankorkut/mask2ai
+- Open source, MIT: https://github.com/yhdhappy/veilAI
 
 Not affiliated with OpenAI or Anthropic.
 
-Detection is pattern based. A bare name in free text with no title, label or matching email nearby is not detected. Full list of what is and is not caught: https://mask2ai.com/docs/
+Detection is pattern based. A bare name in free text with no title, label or matching email nearby is not detected. Full list of what is and is not caught: https://github.com/yhdhappy/veilAI
 
 ## Single purpose
 
-Replace personal data in messages sent to claude.ai and ChatGPT with placeholders, and restore the real values on screen.
+VeilAI replaces personal data in messages sent to claude.ai and ChatGPT with placeholders, and restores the real values on screen.
 
 ## Category
 
@@ -55,7 +55,7 @@ Justification for each: processed only inside the open tab to find and replace p
 Tick all three certifications: not sold to third parties, not used for purposes unrelated to the single purpose, not used for creditworthiness or lending.
 
 - No remote code. All scripts are packaged.
-- Privacy policy URL: https://mask2ai.com/privacy/
+- Privacy policy URL: https://github.com/yhdhappy/veilAI
 
 ## Assets to upload
 
@@ -65,7 +65,7 @@ Tick all three certifications: not sold to third parties, not used for purposes 
 
 ## Package
 
-Run `scripts/pack-extension.sh`; upload `dist/mask2ai-extension-<version>.zip`. The zip contains `manifest.json` plus every script and icon the manifest references, read from the manifest itself.
+Run `scripts/pack-extension.sh`; upload `dist/veilAI-extension-<version>.zip`. The zip contains `manifest.json` plus every script and icon the manifest references, read from the manifest itself.
 
 ## After publishing
 
@@ -75,7 +75,7 @@ Put the 32-letter item ID from the store URL into `store/id.txt` (no newline) an
 
 1. Register at https://chrome.google.com/webstore/devconsole (one-time developer fee).
 2. New item, upload the zip.
-3. Fill the store listing from this file, upload the icon and at least one screenshot. Homepage and support URL: https://mask2ai.com
+3. Fill the store listing from this file, upload the icon and at least one screenshot. Homepage and support URL: https://github.com/yhdhappy/veilAI
 4. Privacy tab: answer as above, set the privacy policy URL.
 5. Account tab: verify the contact email and declare trader or non-trader status (EU).
 6. Submit for review. First review usually takes a few days. Content scripts on three hosts and no permissions keep it in the fast lane.

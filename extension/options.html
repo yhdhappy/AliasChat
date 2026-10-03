@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>mask2ai options</title>
+<title>VeilAI options</title>
 <style>
 body { font: 14px/1.5 system-ui, sans-serif; margin: 0; padding: 20px; max-width: 44rem; color: #1c1b18; }
 h1 { font-size: 18px; margin: 0 0 4px; }
@@ -14,10 +14,10 @@ code { background: #f1efe8; padding: 0 4px; border-radius: 3px; }
 </style>
 </head>
 <body>
-<h1>mask2ai configuration</h1>
-<p>One JSON object. <code>disable</code> switches detector types off, <code>extra</code> adds your own patterns, <code>allow</code> lists exact values never to mask. Leave it empty to mask everything. Types: EMAIL, IBAN, CARD, TCKN, SSN, PHONE, ADDRESS, DOB, ID, PLATE, IP, NAME.</p>
+<h1>VeilAI configuration</h1>
+<p>One JSON object. <code>disable</code> switches detector types off, <code>extra</code> adds your own patterns, <code>allow</code> lists exact values never to mask. Leave it empty to mask everything. Types: EMAIL, IBAN, CARD, SSN, PHONE, ADDRESS, DOB, ID, IP, NAME.</p>
 <textarea id="config" spellcheck="false" placeholder='{
-  "disable": ["TCKN", "PLATE"],
+  "disable": ["SSN"],
   "extra": [{ "type": "EMPLOYEE_ID", "pattern": "EMP-\\d{6}" }],
   "allow": ["support@acme.com"]
 }'></textarea>

@@ -1,15 +1,15 @@
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="brand/logo-dark.svg"><img src="brand/logo.svg" width="280" alt="mask2ai"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="brand/logo-dark.svg"><img src="brand/logo.svg" width="280" alt="VeilAI"></picture></p>
 
-# mask2ai
+# VeilAI
 
-[![Release](https://img.shields.io/github/v/release/serkankorkut/mask2ai?style=flat-square&color=7c3aed)](https://github.com/serkankorkut/mask2ai/releases/latest)
-[![Tests](https://img.shields.io/github/actions/workflow/status/serkankorkut/mask2ai/test.yml?style=flat-square&label=tests)](https://github.com/serkankorkut/mask2ai/actions/workflows/test.yml)
-[![License](https://img.shields.io/github/license/serkankorkut/mask2ai?style=flat-square)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/serkankorkut/mask2ai?style=flat-square)](https://github.com/serkankorkut/mask2ai/stargazers)
+[![Release](https://img.shields.io/github/v/release/yhdhappy/veilAI?style=flat-square&color=7c3aed)](https://github.com/yhdhappy/veilAI/releases/latest)
+[![Tests](https://img.shields.io/github/actions/workflow/status/yhdhappy/veilAI/test.yml?style=flat-square&label=tests)](https://github.com/yhdhappy/veilAI/actions/workflows/test.yml)
+[![License](https://img.shields.io/github/license/yhdhappy/veilAI?style=flat-square)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/yhdhappy/veilAI?style=flat-square)](https://github.com/yhdhappy/veilAI/stargazers)
 
-Protects your privacy when you use AI. mask2ai keeps personal data on your machine when you work with an AI assistant. It detects names, contact details, identity numbers, payment details and addresses in what you send, replaces them with placeholders before anything leaves your device, and puts the real values back on your screen.
+Protects your privacy when you use AI. VeilAI keeps personal data on your machine when you work with an AI assistant. It detects names, contact details, identity numbers, payment details and addresses in what you send, replaces them with placeholders before anything leaves your device, and puts the real values back on your screen.
 
-Website and docs: [mask2ai.com](https://mask2ai.com)
+Project and docs: [github.com/yhdhappy/veilAI](https://github.com/yhdhappy/veilAI)
 
 Two integrations share one detection core:
 
@@ -23,23 +23,23 @@ Two integrations share one detection core:
 
 ### Claude Code
 
-![mask2ai in Claude Code](demo/claude-code.gif)
+![VeilAI in Claude Code](demo/claude-code.gif)
 
 The real Claude Code terminal with the plugin loaded. The first prompt is blocked and a masked copy is offered. The masked prompt goes through, Claude reads a CSV, the plugin masks 13 values in the tool output before the model sees it, and the model's reply comes back with placeholders that the plugin restores on screen. The model replies in this recording come from `demo/fake-api.js`, a local stand-in for the Anthropic API, so the recording does not depend on an account. The CLI, the hooks and the masking are real.
 
 ### Files in Claude Code
 
-![mask2ai converting a PDF and redacting an image in Claude Code](demo/claude-code-files.gif)
+![VeilAI converting a PDF and redacting an image in Claude Code](demo/claude-code-files.gif)
 
 One prompt reads the sample PDF and the sample image. The PDF read is redirected to a masked text extraction, the image read to a redacted copy, and the reply shows what the model was given. The values in the reply are placeholders restored on screen.
 
-![demo/customer.png before and after mask2ai: the name, email, phone and SSN are blacked out in the copy Claude Code reads](demo/image-before-after.png)
+![demo/customer.png before and after VeilAI: the name, email, phone and SSN are blacked out in the copy Claude Code reads](demo/image-before-after.png)
 
 The redacted copy is real output: `demo/customer-redacted.png` is what the Read tool received in the recording above. Words that match personal data are found by Apple Vision OCR and blacked out in the pixels. The original file is untouched.
 
 ### ChatGPT web
 
-![mask2ai on chatgpt.com](demo/chatgpt-web.gif)
+![VeilAI on chatgpt.com](demo/chatgpt-web.gif)
 
 A real chat on chatgpt.com in Chrome with the extension loaded. The purple captions are added by the recorder. The text under "what ChatGPT actually received" is the `prompt` field captured from the outgoing request.
 
@@ -48,19 +48,17 @@ A real chat on chatgpt.com in Chrome with the extension loaded. The purple capti
 | Type | How it is found | Validation |
 | --- | --- | --- |
 | Email address | pattern | |
-| Phone number | international `+..`, US, UK and Turkish formats | |
+| Phone number | international `+..`, US and UK formats | |
 | Payment card | 13 to 16 digit shapes, spaced or plain | Luhn |
 | IBAN | country code plus grouped alphanumerics | mod 97 |
-| Turkish ID number (TC Kimlik No) | 11 digits | official checksum |
 | US Social Security number | `ddd-dd-dddd` | |
-| Date of birth | after a label such as `DOB`, `date of birth`, `doğum tarihi` | |
-| Passport or ID number | after a label such as `passport no`, `kimlik no`, `ehliyet` | |
-| Turkish licence plate | `34 ABC 123` | |
+| Date of birth | after a label such as `DOB` or `date of birth` | |
+| Passport or ID number | after a label such as `passport no` or `ID number` | |
 | Public IPv4 address | excludes private, loopback and link-local ranges and version strings | |
-| Person name | after a title (`Dr.`, `Sayın`), a cue (`my name is`, `Regards,`, `Benim adım`), a label (`name:`, `"firstName":`), or derived from a masked email (`jane.doe@` also hides `Jane` and `Doe`) | shape check |
-| Street address | after a label (`address:`, `adres:`), US and UK street shapes, Turkish `Mah.` / `Cad.` / `Sok.` shapes with `No:` | shape check |
+| Person name | after a title (`Dr.`), a cue (`my name is`, `Regards,`), a label (`name:`, `"firstName":`), or derived from a masked email (`jane.doe@` also hides `Jane` and `Doe`) | shape check |
+| Street address | after an `address:` label or US and UK street shapes | shape check |
 
-Detection is pattern based and works in English and Turkish. Structured identifiers are matched reliably. Names and addresses are matched when there is a signal around them: a label, a title, a cue or a matching email. A bare name in free text with none of these passes through, and semantic facts such as health, religion or income are not detected. See Limits.
+Detection is pattern based. Structured identifiers are matched reliably. Names and addresses are matched when there is a signal around them: a label, a title, a cue or a matching email. A bare name in free text with none of these passes through, and semantic facts such as health, religion or income are not detected. See Limits.
 
 ## Files
 
@@ -101,29 +99,29 @@ Everything left of the API runs on your machine. The API only receives placehold
 ### Claude Code
 
 ```
-/plugin install mask2ai --marketplace serkankorkut/mask2ai
+/plugin install veil-ai --marketplace yhdhappy/veilAI
 ```
 
 Claude Code asks you to confirm the marketplace source, then to pick a scope. On Claude Code older than 2.1.275, add the marketplace first:
 
 ```
-/plugin marketplace add serkankorkut/mask2ai
-/plugin install mask2ai@mask2ai
+/plugin marketplace add yhdhappy/veilAI
+/plugin install veil-ai@veilAI
 ```
 
 Choose the user scope to cover every project. Requires Node.js 18 or newer on `PATH`. To try a checkout without installing:
 
 ```
-claude --plugin-dir /path/to/mask2ai
+claude --plugin-dir /path/to/veilAI
 ```
 
 ### claude.ai and ChatGPT in Chrome
 
-1. Clone this repository, or download `mask2ai-extension-<version>.zip` from the [latest release](https://github.com/serkankorkut/mask2ai/releases/latest) and unzip it.
+1. Clone this repository, or download `veilAI-extension-<version>.zip` from the [latest release](https://github.com/yhdhappy/veilAI/releases/latest) and unzip it.
 2. Open `chrome://extensions`, enable Developer mode, choose Load unpacked and select the repository folder. The `manifest.json` at the root is the extension. Chrome 111 or newer is required.
-3. Open claude.ai or chatgpt.com. A "mask2ai: on" toast confirms the extension is active.
+3. Open claude.ai or chatgpt.com. A "VeilAI: on" toast confirms the extension is active.
 
-After changing the extension files, click the Reload icon on the mask2ai card in `chrome://extensions`. The version shown on the card comes from `manifest.json`; if it does not match the file, Chrome is still running the old build.
+After changing the extension files, click the Reload icon on the VeilAI card in `chrome://extensions`. The version shown on the card comes from `manifest.json`; if it does not match the file, Chrome is still running the old build.
 
 **First test.** Open a new chat and send a message with made-up data, for example:
 
@@ -131,16 +129,16 @@ After changing the extension files, click the Reload icon on the mask2ai card in
 Write a short note to jane.doe@example.com confirming her phone +1 555 555 5555 and SSN 111-11-1111.
 ```
 
-Expected: a toast "mask2ai: masked 3 values before sending" appears bottom right, your message bubble shows the values you typed, and the reply is written around placeholders the assistant received, shown to you with the real values. To see what actually left the browser, open DevTools, Network, select the `completion` or `conversation` request and look at its payload.
+Expected: a toast "VeilAI: masked 3 values before sending" appears bottom right, your message bubble shows the values you typed, and the reply is written around placeholders the assistant received, shown to you with the real values. To see what actually left the browser, open DevTools, Network, select the `completion` or `conversation` request and look at its payload.
 
 ## What you will see
 
 **In Claude Code**
 
-- At session start: "mask2ai active: personal data in prompts and tool output is masked before it reaches the model".
+- At session start: "VeilAI active: personal data in prompts and tool output is masked before it reaches the model".
 - When a prompt contains personal data: the prompt is blocked before it is sent and the masked copy is shown. On macOS the masked copy is also placed in the clipboard. Paste it and send.
 - When an image pasted into the prompt contains personal data: the prompt is blocked, the message names a redacted copy of the image, and you attach that copy instead. An image cannot be swapped inside a prompt the way a file read can, so this is a block rather than a silent fix.
-- After a tool result is masked: "mask2ai: masked N values in Read output" under the tool call.
+- After a tool result is masked: "VeilAI: masked N values in Read output" under the tool call.
 - When Claude edits a file or runs a command that contains a placeholder, the real value is restored before the tool runs, so edits match and commands work.
 - When Claude's reply contains a placeholder, the real value is shown on screen. The transcript keeps the placeholder.
 
@@ -155,7 +153,7 @@ Everything is on by default. One JSON object turns detector types off, adds your
 
 ```json
 {
-  "disable": ["TCKN", "PLATE"],
+  "disable": ["SSN"],
   "extra": [{ "type": "EMPLOYEE_ID", "pattern": "EMP-\\d{6}" }],
   "allow": ["support@acme.com"]
 }
@@ -163,13 +161,13 @@ Everything is on by default. One JSON object turns detector types off, adds your
 
 | Key | Meaning |
 | --- | --- |
-| `disable` | Types to switch off: `EMAIL`, `IBAN`, `CARD`, `TCKN`, `SSN`, `PHONE`, `ADDRESS`, `DOB`, `ID`, `PLATE`, `IP`, `NAME`. Country-specific detectors such as the Turkish ID number or licence plate are the usual candidates. |
+| `disable` | Types to switch off: `EMAIL`, `IBAN`, `CARD`, `SSN`, `PHONE`, `ADDRESS`, `DOB`, `ID`, `IP`, `NAME`. |
 | `extra` | Your own detectors: a `type` name that becomes the placeholder label and a JavaScript regular expression in `pattern`, with optional `flags`. Matches are masked and restored like everything else. |
 | `allow` | Exact values that are never masked, such as a shared support address. |
 
 **Claude Code** reads, in this order, the file named in `MASK2AI_CONFIG`, then `.mask2ai.json` in the working directory, then `~/.mask2ai/config.json`. The first one found wins and the session start line names it. A file that does not parse is ignored and the line says so.
 
-**Chrome**: right-click the mask2ai icon, choose Options, paste the JSON and save. It is kept in Chrome storage and applies after the tab reloads.
+**Chrome**: right-click the VeilAI icon, choose Options, paste the JSON and save. It is kept in Chrome storage and applies after the tab reloads.
 
 ## Verify
 
@@ -215,7 +213,7 @@ If you prefer your own instrument, point `ANTHROPIC_BASE_URL` at a logging proxy
 - `SessionStart` returns a status line for the user and one line of context telling the model that `__PII_*__` tokens are opaque literals to copy verbatim.
 - `SessionEnd` removes the session's converted file copies and prunes placeholder maps older than 30 days. The map itself is kept, because the desktop app ends and resumes sessions freely and a placeholder from before a resume must still restore.
 
-**Detection is an ordered pattern list** in `core/pii.js`. Each entry is a type, a regular expression and an optional validator. Emails run first so their digits are not later read as phones; cards, IBANs and Turkish ID numbers run before phones for the same reason. Label, title and cue patterns capture only the value, and a shape check rejects values such as `name: mask2ai` or `address: 0x7fff`. Generic labels such as `name:` or `owner:` only match two or more capitalised words, so `"name": "Bash"` in JSON or `owner: Docker` in config files is left alone; `firstName:` and `surname:` still take a single word. After the static pass, the local part of every masked email is split into tokens, and each token is masked where it appears capitalised or in capitals, accent-insensitively, which is how `jane.doe@` also hides `Jane` and `DOE` in a CSV column.
+**Detection is an ordered pattern list** in `core/pii.js`. Each entry is a type, a regular expression and an optional validator. Emails run first so their digits are not later read as phones; cards and IBANs run before phones for the same reason. Label, title and cue patterns capture only the value, and a shape check rejects values such as `name: VeilAI` or `address: 0x7fff`. Generic labels such as `name:` or `owner:` only match two or more capitalised words, so `"name": "Bash"` in JSON or `owner: Docker` in config files is left alone; `firstName:` and `surname:` still take a single word. After the static pass, the local part of every masked email is split into tokens, and each token is masked where it appears capitalised or in capitals, which is how `jane.doe@` also hides `Jane` and `DOE` in a CSV column.
 
 **Placeholders are content-addressed.** A value becomes `__PII_<TYPE>_<6 hex digits of a hash of the value>__`. The same value yields the same placeholder in a prompt, a file read and a grep result without a lookup, hooks running in parallel cannot disagree, and after a resume a single re-read rebuilds the map. Underscores keep the token a single word for the model and harmless inside code.
 
@@ -227,7 +225,7 @@ If you prefer your own instrument, point `ANTHROPIC_BASE_URL` at a logging proxy
 
 ## Chrome Web Store
 
-`scripts/pack-extension.sh` builds `dist/mask2ai-extension-<version>.zip` containing only the files the extension needs. `store/listing.md` holds the listing text, permissions justification, privacy answers and the submission steps.
+`scripts/pack-extension.sh` builds `dist/veilAI-extension-<version>.zip` containing only the files the extension needs. `store/listing.md` holds the listing text, permissions justification, privacy answers and the submission steps.
 
 ## Development
 
@@ -254,7 +252,7 @@ node demo/chrome-open.js https://chatgpt.com/
 node demo/record-live.js chatgpt.com "<your message>" demo/chatgpt-web.gif
 ```
 
-The marketing site for mask2ai.com lives in its own repository, github.com/serkankorkut/mask2ai.com.
+The project repository is [github.com/yhdhappy/veilAI](https://github.com/yhdhappy/veilAI).
 
 ## Continuing the work
 

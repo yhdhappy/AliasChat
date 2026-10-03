@@ -18,10 +18,18 @@ VeilAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用�
 - [x] Phase 0 验货：仓库真实、MIT 确认、npm test 通过、机制读懂
 - [x] 仓库建立 + 代码推送（2026-10-04 凌晨）
 - [x] Logo：第 1 方案（盾牌+气泡+面纱），已切 16/32/48/128 换进 extension/icons/，原图存 brand/veilAI-logo-original.png（2026-10-04 早）
-- [ ] Phase 1：品牌重命名（manifest/README/store listing）、去 Turkish（TCKN/PLATE/土耳其地址姓名模式）、英文打磨
+- [x] Phase 1：品牌重命名 mask2ai→VeilAI + 去 Turkish（2026-10-04 上午，Codex gpt-6-luna 执行，pi deepseek-v4.1-flash 审查 FAIL→修完 7 项→PASS）
+  - 改名：manifest/README/store listing/options.html/content.js toast/hooks/plugin.json/marketplace.json/demo 脚本；插件统一 kebab-case 身份 `veil-ai`；LICENSE 未动
+  - 去 Turkish：删 TCKN 校验+模式、PLATE、土耳其地址/DOB/证件/姓名线索、FOLD 字符映射、土耳其手机号格式；保留 `\b0\d{4} ?\d{6}\b`（实为英国手机号，测试要求）
+  - 刻意保留的内部标识（兼容性）：MASK2AI_CONFIG、`~/.mask2ai/config.json`、`.mask2ai.json`、`data-mask2ai`、`mask2ai-config` postMessage、`~/.claude/veilAI`（已改名）、JS 命名空间
+  - `npm test` 通过（ok / office ok）
+- [ ] Phase 1b：安全修复（Claude 网页版审计报告 10 项问题，达叔已批用 gpt-6.1-sol）
+  - 修：①同名二次扫描 ③postMessage token 加固 ④fail-closed+toast ⑥哈希加长+会话盐 ⑦迁 chrome.storage.session ⑧自定义正则保存校验 ⑩XHR 拦截 ②结构化中文格式（手机/身份证/银联卡）
+  - 不修：⑨（CLI 插件范围外）②中文姓名/地址（要 NER，Phase 2）
+  - 待达叔：⑤ retry_completion 需真账号抓包验证；⑩需真站验证
 - [ ] Phase 2：物料（截图、商店描述）
 - [ ] Phase 3：Gumroad 上架 + license 验证接入
-- [ ] Phase 4：Chrome 商店上架（$5 达叔付）+ Edge
+- [ ] Phase 4：Chrome 商店上架（$5 达叔付）+ Edge（注意：store/listing.md 的 privacy policy URL 目前是 GitHub 仓库地址，上架前需换成真实隐私政策页）
 - [ ] Phase 5：Product Hunt / Reddit 获客
 
 ## 技术要点（给 Codex 的）
