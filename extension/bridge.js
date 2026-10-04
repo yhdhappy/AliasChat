@@ -1,5 +1,5 @@
 (() => {
-  const { mask, unmask, deepMap, configure } = globalThis.pii;
+  const { mask, unmask, deepMap, configure, hasPlaceholder } = globalThis.pii;
   const { maskFile, classify } = globalThis.mask2aiFiles;
   // Inlined from extension/rewrite.js: rewrite.js is also loaded in the MAIN
   // world, and Chrome does not reliably provide its global in the isolated
@@ -45,10 +45,6 @@
       await chrome.storage.session.remove('veilMap');
       return {};
     }
-    if (data.type === 'unmask-request') {
-      const values = await getMap();
-      return { body: deepMap(data.body, text => unmask(text, values)) };
-    }
     if (typeof data.salt !== 'string' || !/^[0-9a-f]{64}$/.test(data.salt)) throw new Error('Invalid masking session');
     salt ??= data.salt;
     const found = Object.create(null);
@@ -78,11 +74,64 @@
     const data = e.data;
     if (!data || typeof data !== 'object') return;
     if (data.type === 'mask2ai-ready') return sendConfig();
-    if (data.token !== token || !['mask-request', 'unmask-request', 'map-clear'].includes(data.type) || typeof data.id !== 'string') return;
+    if (data.token !== token || !['mask-request', 'map-clear'].includes(data.type) || typeof data.id !== 'string') return;
     queue = queue.then(async () => {
       try { window.postMessage({ type: data.type === 'map-clear' ? 'map-cleared' : data.type.replace('-request', '-result'), token, id: data.id, result: await run(data) }, '*'); }
       catch { window.postMessage({ type: data.type === 'map-clear' ? 'map-cleared' : data.type.replace('-request', '-result'), token, id: data.id, error: 'VeilAI could not process personal data safely' }, '*'); }
     });
   });
   sendConfig();
+
+  const eligible = node => node.nodeType === 3 && hasPlaceholder(node.data) && !node.parentElement?.closest('[contenteditable], textarea, [data-mask2ai]');
+  const unknownPlaceholders = new Set();
+  const PLACEHOLDER_RE = /__PII_[A-Z_]+_(?:[0-9a-f]{12}|[0-9a-f]{6})__/g;
+  let unmaskWindowStart = 0;
+  let unmaskCount = 0;
+  new MutationObserver(async muts => {
+    const nodes = new Set();
+    for (const m of muts) {
+      if (m.type === 'characterData' && eligible(m.target)) nodes.add(m.target);
+      for (const n of m.addedNodes) {
+        if (eligible(n)) nodes.add(n);
+        else if (n.nodeType === 1) {
+          const walker = document.createTreeWalker(n, NodeFilter.SHOW_TEXT);
+          let child;
+          while ((child = walker.nextNode())) if (eligible(child)) nodes.add(child);
+        }
+      }
+    }
+    if (!nodes.size) return;
+    const now = Date.now();
+    if (now - unmaskWindowStart > 1000) {
+      unmaskWindowStart = now;
+      unmaskCount = 0;
+    }
+    if (unmaskCount >= 10) return;
+    unmaskCount++;
+    const targets = [...nodes].filter(node => {
+      const placeholders = node.data.match(PLACEHOLDER_RE) || [];
+      return placeholders.some(p => !unknownPlaceholders.has(p));
+    });
+    if (!targets.length) return;
+    const values = await getMap();
+    const original = targets.map(node => node.data);
+    const body = original.map(text => unmask(text, values));
+    for (let i = 0; i < targets.length; i++) {
+      const placeholders = original[i].match(PLACEHOLDER_RE) || [];
+      for (const p of placeholders) if (body[i].includes(p)) unknownPlaceholders.add(p);
+    }
+    const updates = targets.map((node, i) => ({ node, before: original[i], after: body[i] })).filter(({ node, before, after }) => after !== before && node.data === before && eligible(node));
+    if (!updates.length) return;
+    const applied = [];
+    try {
+      for (const update of updates) {
+        applied.push(update);
+        update.node.data = update.after;
+      }
+    } catch (error) {
+      for (const { node, before } of applied) {
+        try { node.data = before; } catch {}
+      }
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
 })();

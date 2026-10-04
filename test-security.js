@@ -76,7 +76,7 @@ const extension = (config = {}) => {
   const toasts = [];
   const shared = { crypto: webcrypto, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, Request, Response, Blob, File, FormData, URLSearchParams, CompressionStream, DecompressionStream, Event, NodeFilter: { SHOW_TEXT: 4 }, clearTimeout, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); return timer; } };
   let observer;
-  let rejectUnmask = false;
+  let bridgeObserver;
   class XHR extends EventTarget {
     constructor() { super(); this.readyState = 0; this.responseType = ''; this.raw = ''; }
     get responseText() { if (this.responseType === 'json') throw new Error('InvalidStateError'); return this.raw; }
@@ -99,7 +99,6 @@ const extension = (config = {}) => {
     window.addEventListener = (type, fn) => { if (type === 'message') listeners.push({ window, fn }); };
     window.postMessage = data => {
       messages.push(structuredClone(data));
-      if (rejectUnmask && data.type === 'unmask-request') return queueMicrotask(() => deliver({ type: 'unmask-result', id: data.id, token: data.token, error: 'Restoration failed' }));
       queueMicrotask(() => deliver(data));
     };
   }
@@ -110,14 +109,17 @@ const extension = (config = {}) => {
     createTreeWalker: root => { let i = 0; return { nextNode: () => root.children[i++] }; }
   }, MutationObserver: class { constructor(fn) { observer = fn; } observe() {} } });
   const sessionStore = {};
-  const bridge = vm.createContext({ ...shared, window: bridgeWindow, chrome: { runtime: {}, storage: { sync: { get: (key, fn) => queueMicrotask(() => fn({ config })) }, session: { get: async key => ({ veilMap: sessionStore.veilMap }), set: async obj => { Object.assign(sessionStore, obj); }, remove: async key => { delete sessionStore.veilMap; }, clear: async () => { for (const k of Object.keys(sessionStore)) delete sessionStore[k]; } } } } });
+  const bridge = vm.createContext({ ...shared, window: bridgeWindow, document: {
+    documentElement: {},
+    createTreeWalker: root => { let i = 0; return { nextNode: () => root.children[i++] }; }
+  }, MutationObserver: class { constructor(fn) { bridgeObserver = fn; } observe() {} }, chrome: { runtime: {}, storage: { sync: { get: (key, fn) => queueMicrotask(() => fn({ config })) }, session: { get: async key => ({ veilMap: sessionStore.veilMap }), set: async obj => { Object.assign(sessionStore, obj); }, remove: async key => { delete sessionStore.veilMap; }, clear: async () => { for (const k of Object.keys(sessionStore)) delete sessionStore[k]; } } } } });
   const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
   for (const file of manifest.content_scripts[0].js) {
     vm.runInContext(fs.readFileSync(file, 'utf8'), page, { filename: file });
     if (page.piiRewrite) pageWindow.piiRewrite = page.piiRewrite;
   }
   for (const file of manifest.content_scripts[1].js) vm.runInContext(fs.readFileSync(file, 'utf8'), bridge, { filename: file });
-  return { page: pageWindow, requests, messages, toasts, deliver, mutate: muts => observer(muts), failUnmask: value => { rejectUnmask = value; } };
+  return { page: pageWindow, requests, messages, toasts, deliver, mutate: muts => bridgeObserver(muts) };
 };
 
 (async () => {
@@ -164,15 +166,10 @@ const extension = (config = {}) => {
   const node = { nodeType: 3, data: placeholders.join(' '), parentElement: { closest: () => null } };
   await ext.mutate([{ type: 'characterData', target: node, addedNodes: [] }]);
   assert.strictEqual(node.data, 'Ali Veli Ali Veli jane.doe@example.com');
-  ext.failUnmask(true);
-  const nodes = [placeholders[0], placeholders[2]].map(data => ({ ...node, data }));
-  await ext.mutate(nodes.map(target => ({ type: 'characterData', target, addedNodes: [] })));
-  assert.deepStrictEqual(nodes.map(node => node.data), [placeholders[0], placeholders[2]]);
-  ext.failUnmask(false);
   const xhr = new ext.page.XMLHttpRequest();
   xhr.open('POST', url);
   let completed = false;
-  xhr.addEventListener('load', () => { assert.strictEqual(xhr.responseText, body); completed = true; });
+  xhr.addEventListener('load', () => { assert.strictEqual(xhr.responseText, wire); completed = true; });
   xhr.send(body);
   await until(() => completed);
   assert.strictEqual(ext.requests.at(-1).body, wire);
@@ -181,7 +178,7 @@ const extension = (config = {}) => {
   jsonXhr.responseType = 'json';
   let jsonComplete = false;
   jsonXhr.addEventListener('load', () => {
-    assert.strictEqual(JSON.stringify(jsonXhr.response), body);
+    assert.strictEqual(JSON.stringify(jsonXhr.response), wire);
     assert.throws(() => jsonXhr.responseText, /InvalidStateError/);
     jsonComplete = true;
   });
@@ -207,14 +204,12 @@ const extension = (config = {}) => {
   unrelated.open('POST', 'https://chatgpt.com/backend-api/me');
   unrelated.send('untouched');
   assert.strictEqual(unrelated.responseText, 'untouched');
-  ext.failUnmask(true);
   const failedRestore = new ext.page.XMLHttpRequest();
   failedRestore.open('POST', url);
   let placeholdersKept = false;
   failedRestore.addEventListener('load', () => { assert.strictEqual(failedRestore.responseText, wire); placeholdersKept = true; });
   failedRestore.send(body);
   await until(() => placeholdersKept);
-  ext.failUnmask(false);
   const editable = { ...node, data: placeholders[2], parentElement: { closest: () => true } };
   await ext.mutate([{ type: 'characterData', target: editable, addedNodes: [] }]);
   assert.strictEqual(editable.data, placeholders[2]);

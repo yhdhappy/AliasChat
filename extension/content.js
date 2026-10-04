@@ -17,7 +17,7 @@
       acceptConfig();
       return;
     }
-    if (data.token !== token || !['mask-result', 'unmask-result', 'map-cleared'].includes(data.type)) return;
+    if (data.token !== token || !['mask-result', 'map-cleared'].includes(data.type)) return;
     const request = pending.get(data.id);
     if (!request || request.type !== data.type) return;
     pending.delete(data.id);
@@ -108,37 +108,8 @@
   const send = proto.send;
   const abort = proto.abort;
   const states = new WeakMap();
-  const responseText = Object.getOwnPropertyDescriptor(proto, 'responseText').get;
-  const response = Object.getOwnPropertyDescriptor(proto, 'response').get;
   proto.open = function (method, url, async = true, ...args) {
-    const state = { url: String(url), async: async !== false, active: true, restored: false, replay: false, events: [], running: false };
-    states.set(this, state);
-    if (!Object.hasOwn(this, 'responseText')) {
-      Object.defineProperties(this, {
-        responseText: { configurable: true, get() { const s = states.get(this); return s?.restored && ['', 'text'].includes(this.responseType) ? s.text : responseText.call(this); } },
-        response: { configurable: true, get() { const s = states.get(this); return s?.restored ? s.value : response.call(this); } }
-      });
-      for (const type of ['readystatechange', 'load', 'loadend']) this.addEventListener(type, event => {
-        const s = states.get(this);
-        if (!s?.active || s.replay || !isChatRequest(s.url) || this.readyState !== 4 || !['', 'text', 'json'].includes(this.responseType)) return;
-        event.stopImmediatePropagation();
-        s.events.push(typeof ProgressEvent !== 'undefined' && event instanceof ProgressEvent ? new ProgressEvent(type, { lengthComputable: event.lengthComputable, loaded: event.loaded, total: event.total }) : new Event(type));
-        if (s.running) return;
-        s.running = true;
-        const raw = this.responseType === 'json' ? response.call(this) : responseText.call(this);
-        rpc('unmask-request', { body: raw }).then(result => {
-          if (states.get(this) !== s || !s.active) return;
-          s.restored = true;
-          s.value = result.body;
-          s.text = this.responseType === 'json' ? undefined : result.body;
-        }).catch(() => {}).finally(() => {
-          if (states.get(this) !== s || !s.active) return;
-          s.replay = true;
-          for (const queued of s.events.splice(0)) this.dispatchEvent(queued);
-          s.replay = false;
-        });
-      }, true);
-    }
+    states.set(this, { url: String(url), async: async !== false, active: true });
     return open.call(this, method, url, async, ...args);
   };
   proto.send = function (body) {
@@ -167,60 +138,4 @@
     if (state) state.active = false;
     return abort.call(this);
   };
-
-  const eligible = node => node.nodeType === 3 && hasPlaceholder(node.data) && !node.parentElement?.closest('[contenteditable], textarea, [data-mask2ai]');
-  const unknownPlaceholders = new Set();
-  const PLACEHOLDER_RE = /__PII_[A-Z_]+_(?:[0-9a-f]{12}|[0-9a-f]{6})__/g;
-  let unmaskWindowStart = 0;
-  let unmaskCount = 0;
-  new MutationObserver(async muts => {
-    const nodes = new Set();
-    for (const m of muts) {
-      if (m.type === 'characterData' && eligible(m.target)) nodes.add(m.target);
-      for (const n of m.addedNodes) {
-        if (eligible(n)) nodes.add(n);
-        else if (n.nodeType === 1) {
-          const walker = document.createTreeWalker(n, NodeFilter.SHOW_TEXT);
-          let child;
-          while ((child = walker.nextNode())) if (eligible(child)) nodes.add(child);
-        }
-      }
-    }
-    if (!nodes.size) return;
-    const now = Date.now();
-    if (now - unmaskWindowStart > 1000) {
-      unmaskWindowStart = now;
-      unmaskCount = 0;
-    }
-    if (unmaskCount >= 10) return;
-    unmaskCount++;
-    const targets = [...nodes].filter(node => {
-      const placeholders = node.data.match(PLACEHOLDER_RE) || [];
-      return placeholders.some(p => !unknownPlaceholders.has(p));
-    });
-    if (!targets.length) return;
-    const original = targets.map(node => node.data);
-    try {
-      const { body } = await rpc('unmask-request', { body: original });
-      if (!Array.isArray(body) || body.length !== targets.length || body.some(text => typeof text !== 'string')) throw new Error('Invalid restoration');
-      for (let i = 0; i < targets.length; i++) {
-        const placeholders = original[i].match(PLACEHOLDER_RE) || [];
-        for (const p of placeholders) if (body[i].includes(p)) unknownPlaceholders.add(p);
-      }
-      const updates = targets.map((node, i) => ({ node, before: original[i], after: body[i] })).filter(({ node, before, after }) => after !== before && node.data === before && eligible(node));
-      if (!updates.length) return;
-      const applied = [];
-      try {
-        for (const update of updates) {
-          applied.push(update);
-          update.node.data = update.after;
-        }
-      } catch (error) {
-        for (const { node, before } of applied) {
-          try { node.data = before; } catch {}
-        }
-        throw error;
-      }
-    } catch {}
-  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
 })();
