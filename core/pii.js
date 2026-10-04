@@ -102,7 +102,7 @@
     .flat();
 
   const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const NAME_STOPLIST = new Set('will may mark grace bill chase penny amber crystal summer autumn reed clay stone ford banks cook hunter fisher mason carter cooper parker porter taylor weaver hunter bailey carter hunter'.split(' '));
+  const NAME_STOPLIST = new Set('will may mark grace bill chase penny amber crystal summer autumn'.split(' '));
   const repeatedNames = found => Object.entries(found)
     .filter(([p]) => p.startsWith('__PII_NAME_'))
     .flatMap(([, name]) => {
