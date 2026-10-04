@@ -100,3 +100,13 @@ PrivyAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用
 - [x] **C2 署名修正**：`LICENSE` 加 `Copyright (c) 2026 yhdhappy`（保留原作者）；`package.json`、`​.claude-plugin/plugin.json` 作者改为 yhdhappy；`README.md` 加 "Based on mask2ai (MIT) by Serkan Korkut"。
 - [ ] **待做（Chrome 8月新规）**：首次运行同意弹窗（见上方待办第 1 项）。
 - [ ] **待做**：`docs/PRODUCT.md` 状态校准为"已完成"（见上方待办第 2 项）。
+
+## 上架前收尾（2026-10-04，0.7.0）
+
+- 隐私政策链接统一为 `https://yhdhappy.github.io/PrivyAI/privacy.html`，Pages 已开启。
+- 版本统一为 0.7.0；补充 `extension/manifest.json`，与根目录兼容入口保持一致。
+- PDF/图片默认拦截通过 `opaque-blocked` 错误码显示专用提示；options 说明允许上传的方法和文件不会被遮蔽的风险。
+- 删除页面 `map-clear` 接口；映射继续保存在 `chrome.storage.session`，页面消息不能清除映射。
+- NAME_STOPLIST 仅保留指定的 11 个常见词；新增去重、姓氏重复遮蔽、上传拦截和实际 zip 内容回归检查。
+- 验证：`npm test` 输出 ok / office ok / security ok；随后 `node test-security.js` 输出 security ok。未运行 `demo/verify-web.js`，由 Mac 上的真实 Chrome 补跑。
+- 沙箱 `.git` 只读，提交因 index.lock 创建失败而未执行，未 push；六项独立补丁和外部提交脚本保存在 `/tmp/privyai-prepublish/`，等待外部以 Muse <muse@local> 逐项提交后统一 push。

@@ -4,11 +4,32 @@ const vm = require('vm');
 const { Worker } = require('worker_threads');
 const { webcrypto } = require('crypto');
 const { File } = require('buffer');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const runFile = promisify(execFile);
 const pii = require('./core/pii.js');
 const { rewrite } = require('./extension/rewrite.js');
 const { validatePattern, validateExtras } = require('./extension/regex-validation.js');
 
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+assert.deepStrictEqual(JSON.parse(fs.readFileSync('extension/manifest.json', 'utf8')), manifest);
+assert.strictEqual(manifest.version, require('./package.json').version);
+assert.strictEqual(manifest.version, require('./.claude-plugin/plugin.json').version);
+const stoplistSource = fs.readFileSync('core/pii.js', 'utf8').match(/const NAME_STOPLIST = new Set\('([^']+)'\.split\(' '\)\)/);
+assert(stoplistSource, 'NAME_STOPLIST declaration must be found');
+const stoplist = stoplistSource[1].split(' ');
+assert.strictEqual(new Set(stoplist).size, stoplist.length, 'NAME_STOPLIST must not contain duplicates');
+for (const name of ['Reed', 'Clay', 'Stone', 'Ford', 'Banks', 'Cook', 'Hunter', 'Fisher', 'Mason', 'Carter', 'Cooper', 'Parker', 'Porter', 'Taylor', 'Weaver', 'Bailey']) {
+  const values = { __PII_NAME_abcdef123456__: name };
+  const text = `${name} ${name.toLowerCase()} ${name.toUpperCase()}`;
+  const masked = pii.mask(text, values);
+  assert(/^__PII_NAME_[0-9a-f]{12}__ /.test(masked), `${name} must be masked on repetition`);
+  assert(masked.endsWith(` ${name.toLowerCase()} ${name.toUpperCase()}`));
+  assert.strictEqual(pii.unmask(masked, values), text);
+}
+for (const name of ['Will', 'May', 'Mark', 'Grace', 'Bill', 'Chase', 'Penny', 'Amber', 'Crystal', 'Summer', 'Autumn']) {
+  assert.strictEqual(pii.mask(name, { __PII_NAME_abcdef123456__: name }), name);
+}
 if (manifest.background) {
   const files = [...new Set(manifest.content_scripts.flatMap(script => script.js))];
   const background = fs.readFileSync(manifest.background.service_worker, 'utf8');
@@ -132,6 +153,13 @@ const extension = (config = {}) => {
 };
 
 (async () => {
+  await runFile('sh', ['scripts/pack-extension.sh']);
+  const archive = `dist/privyAI-extension-${manifest.version}.zip`;
+  const archiveFiles = (await runFile('unzip', ['-Z1', archive])).stdout.trim().split('\n');
+  for (const file of ['extension/background.js', 'extension/welcome.html', 'extension/welcome.js']) {
+    assert(archiveFiles.includes(file), `Extension archive must include ${file}`);
+    assert.strictEqual((await runFile('unzip', ['-p', archive, file])).stdout, fs.readFileSync(file, 'utf8'));
+  }
   assert.throws(() => validatePattern({ pattern: '[' }, createWorker), SyntaxError);
   assert.throws(() => validatePattern({ pattern: 'a', flags: 'zz' }, createWorker), SyntaxError);
   await validateExtras({ extra: [{ pattern: 'EMP-\\d{6}' }, { pattern: '[a-z]+', flags: 'i' }] }, createWorker);
@@ -257,7 +285,7 @@ const extension = (config = {}) => {
   const requestCount = ext.requests.length;
   await assert.rejects(ext.page.fetch(url, { method: 'POST', body: '{invalid json' }));
   assert.strictEqual(ext.requests.length, requestCount);
-  assert(ext.toasts.some(text => text.includes('request blocked')));
+  assert(ext.toasts.includes('🛡 PrivyAI: could not mask personal data; request blocked'));
   const malformedForm = 'payload=' + encodeURIComponent('{"prompt":"jane.doe@example.com"}');
   const badConfig = extension({ extra: [{ pattern: '[' }] });
   await assert.rejects(badConfig.page.fetch(url, { method: 'POST', body: malformedForm }));
@@ -269,6 +297,28 @@ const extension = (config = {}) => {
   failedXhr.send(body);
   await until(() => failed);
   assert.strictEqual(badConfig.requests.length, 0);
+  const opaqueToast = '🛡 PrivyAI: PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them in PrivyAI options (allowOpaqueUploads).';
+  const blockedUpload = extension();
+  const pdf = new File(['%PDF-1.7'], 'private.pdf', { type: 'application/pdf' });
+  const pdfForm = new FormData();
+  pdfForm.append('file', pdf);
+  await assert.rejects(blockedUpload.page.fetch(url, { method: 'POST', body: pdfForm }), error => error.code === 'opaque-blocked');
+  assert.strictEqual(blockedUpload.requests.length, 0);
+  assert(blockedUpload.messages.some(message => message.type === 'mask-result' && message.code === 'opaque-blocked'));
+  assert.deepStrictEqual(blockedUpload.toasts, [opaqueToast]);
+  const imageXhr = new blockedUpload.page.XMLHttpRequest();
+  imageXhr.open('POST', url);
+  let imageBlocked = false;
+  imageXhr.addEventListener('error', () => { imageBlocked = true; });
+  imageXhr.send(new File(['image bytes'], 'private.png', { type: 'image/png' }));
+  await until(() => imageBlocked);
+  assert.strictEqual(blockedUpload.requests.length, 0);
+  assert.deepStrictEqual(blockedUpload.toasts, [opaqueToast, opaqueToast]);
+  const allowedUpload = extension({ allowOpaqueUploads: true });
+  await allowedUpload.page.fetch(url, { method: 'POST', body: pdfForm });
+  assert.strictEqual(allowedUpload.requests.length, 1);
+  assert.strictEqual(await allowedUpload.requests[0].init.body.get('file').text(), '%PDF-1.7');
+  assert(allowedUpload.toasts.some(text => text.includes('uploaded uninspected')));
   const secondSession = extension();
   await secondSession.page.fetch(url, { method: 'POST', body });
   assert.notStrictEqual(secondSession.requests[0].init.body, wire);
