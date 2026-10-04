@@ -17,7 +17,7 @@
       acceptConfig();
       return;
     }
-    if (data.token !== token || !['mask-result', 'map-cleared'].includes(data.type)) return;
+    if (data.token !== token || data.type !== 'mask-result') return;
     const request = pending.get(data.id);
     if (!request || request.type !== data.type) return;
     pending.delete(data.id);
@@ -31,7 +31,7 @@
       pending.delete(id);
       reject(new Error('PrivyAI bridge did not respond'));
     }, 10000);
-    pending.set(id, { resolve, reject, timer, type: type === 'map-clear' ? 'map-cleared' : type.replace('-request', '-result') });
+    pending.set(id, { resolve, reject, timer, type: type.replace('-request', '-result') });
     ready.then(() => {
       if (pending.has(id)) window.postMessage({ type, token, id, salt, ...payload }, '*');
     });

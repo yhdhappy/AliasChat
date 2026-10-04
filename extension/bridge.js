@@ -43,10 +43,6 @@
   const packFile = async file => ({ bytes: await file.arrayBuffer(), name: file.name, type: file.type, lastModified: file.lastModified });
   const run = async data => {
     await ready;
-    if (data.type === 'map-clear') {
-      await chrome.storage.session.remove('privyMap');
-      return {};
-    }
     if (typeof data.salt !== 'string' || !/^[0-9a-f]{64}$/.test(data.salt)) throw new Error('Invalid masking session');
     salt ??= data.salt;
     const found = Object.create(null);
@@ -79,10 +75,10 @@
     const data = e.data;
     if (!data || typeof data !== 'object') return;
     if (data.type === 'mask2ai-ready') return sendConfig();
-    if (data.token !== token || !['mask-request', 'map-clear'].includes(data.type) || typeof data.id !== 'string') return;
+    if (data.token !== token || data.type !== 'mask-request' || typeof data.id !== 'string') return;
     queue = queue.then(async () => {
-      try { window.postMessage({ type: data.type === 'map-clear' ? 'map-cleared' : data.type.replace('-request', '-result'), token, id: data.id, result: await run(data) }, '*'); }
-      catch (error) { window.postMessage({ type: data.type === 'map-clear' ? 'map-cleared' : data.type.replace('-request', '-result'), token, id: data.id, error: 'PrivyAI could not process personal data safely', code: error.code === 'opaque-blocked' ? 'opaque-blocked' : undefined }, '*'); }
+      try { window.postMessage({ type: 'mask-result', token, id: data.id, result: await run(data) }, '*'); }
+      catch (error) { window.postMessage({ type: 'mask-result', token, id: data.id, error: 'PrivyAI could not process personal data safely', code: error.code === 'opaque-blocked' ? 'opaque-blocked' : undefined }, '*'); }
     });
   });
   sendConfig();

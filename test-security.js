@@ -273,9 +273,11 @@ const extension = (config = {}) => {
   await secondSession.page.fetch(url, { method: 'POST', body });
   assert.notStrictEqual(secondSession.requests[0].init.body, wire);
   ext.deliver({ type: 'map-clear', token, id: 'clear-test' });
-  await until(() => ext.messages.some(message => message.type === 'map-cleared' && message.result));
+  await delay();
+  await delay();
+  assert(!ext.messages.some(message => message.type === 'map-cleared'));
   node.data = placeholders[2];
   await ext.mutate([{ type: 'characterData', target: node, addedNodes: [] }]);
-  assert.strictEqual(node.data, placeholders[2]);
+  assert.strictEqual(node.data, 'jane.doe@example.com');
   console.log('security ok');
 })().catch(error => { console.error(error); process.exitCode = 1; });
