@@ -95,9 +95,7 @@
   window.fetch = async function (input, init) {
     try {
       const url = input instanceof Request ? input.url : String(input);
-      if (/claude\.ai|chatgpt\.com|chat\.openai\.com/.test(url)) {
-        try { const u = new URL(url); show(`[diag] fetch ${u.pathname.slice(0, 80)}`, 4000); } catch {}
-      }
+      try { const u = new URL(url, location.href); show(`[diag] fetch ${u.host}${u.pathname.slice(0, 60)}`, 4000); } catch {}
       if (init && init.body != null) init = { ...init, body: await maskBody(url, init.body) };
       else if (input instanceof Request && input.body && isChatRequest(url)) input = new Request(input, { body: await maskBody(url, await input.clone().arrayBuffer()) });
     } catch (error) {
@@ -148,9 +146,7 @@
   proto.send = function (body) {
     const state = states.get(this);
     if (!state) return send.call(this, body);
-    if (/claude\.ai|chatgpt\.com|chat\.openai\.com/.test(state.url)) {
-      try { const u = new URL(state.url); show(`[diag] xhr ${u.pathname.slice(0, 80)}`, 4000); } catch {}
-    }
+    try { const u = new URL(state.url, location.href); show(`[diag] xhr ${u.host}${u.pathname.slice(0, 60)}`, 4000); } catch {}
     const chat = isChatRequest(state.url);
     if (!chat && !(body instanceof FormData) && !(body instanceof File)) return send.call(this, body);
     if (!state.async) {
