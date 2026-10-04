@@ -85,3 +85,18 @@ VeilAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用�
 7. **Pro 版长期考虑（不急）**
    - AgentCloak 用"数字孪生"（真名换假名如 Julio Schmidt）而非占位符，AI 推理效果更好；可作为 Pro 版升级点调研。
    - KnowBe4（9月23日发布浏览器插件做企业影子AI管控）验证了企业方向；咱们 Pro 的团队策略/审计日志路线不变。
+
+## Claude 审核 A 级修复（2026-10-04 完成）
+> 审核报告：`/Users/yhd/Documents/AI_Workspace/project_0011_veilAI/docs/VeilAI 审查报告.md`（达叔 Mac 本地）
+
+- [x] **A1 无限循环（CRITICAL）**：`extension/content.js` 的 MutationObserver 在 unmask 找不到映射时写回原文触发死循环。修复：只在 `after !== before` 时写回；用 `unknownPlaceholders` Set 跳过已知无映射的占位符；每秒最多 10 次 unmask 请求限流。
+- [x] **A2 刷新丢映射（CRITICAL UX）**：`extension/bridge.js` 的 `Map` 改存 `chrome.storage.session`（刷新保留、关浏览器清除、网页不可读）。新增 `extension/background.js` service worker（manifest.json 注册），`scripts/pack-extension.sh` 打包时包含它。
+- [x] **A3 双重遮蔽**：`core/pii.js` 的 `addressLike` 拒绝含 `__PII_` 的值；`unmask` 改循环直到稳定（最多 10 轮）。
+- [x] **A4 过度遮蔽**：`core/pii.js` 的 `repeatedNames` 只对 2+ 词全名做大小写变体；单字名只精确匹配；新增常见词 stoplist（will/may/mark/grace/bill 等）。
+- [x] **A5.1 还原逻辑进隔离世界**：MutationObserver 从 `content.js`（MAIN）搬到 `bridge.js`（isolated），直接读 map 无需 RPC；彻底删除 `unmask-request` postMessage 接口（`content.js` 和 `bridge.js` 双向）；`content.js` 的 XHR 响应还原逻辑删除（页面 JS 只见占位符，DOM 显示由 observer 还原，更安全）。
+- [x] **A5.2 PDF/图片默认拦截**：`core/pii.js` 新增 `allowOpaqueUploads` 配置（默认 false）；`extension/bridge.js` 默认抛错拦截，`options.html` 说明该选项。
+- [x] **A5.3 文档去过度承诺**：`store/listing.md` 和 `docs/privacy.html` 的 "The model only ever sees placeholders" 改为 "replaces the personal data it detects"；新增 Limitations 章节；存储描述更新为 session storage。
+- [x] **A7 清理旧作者文件**：`AGENTS.md` 重写为 VeilAI 专用；删除仓库根 `HANDOFF.md`（只留 `docs/HANDOFF.md`）。
+- [x] **C2 署名修正**：`LICENSE` 加 `Copyright (c) 2026 yhdhappy`（保留原作者）；`package.json`、`​.claude-plugin/plugin.json` 作者改为 yhdhappy；`README.md` 加 "Based on mask2ai (MIT) by Serkan Korkut"。
+- [ ] **待做（Chrome 8月新规）**：首次运行同意弹窗（见上方待办第 1 项）。
+- [ ] **待做**：`docs/PRODUCT.md` 状态校准为"已完成"（见上方待办第 2 项）。
