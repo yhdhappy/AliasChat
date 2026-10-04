@@ -12,7 +12,6 @@ const { rewrite } = require('./extension/rewrite.js');
 const { validatePattern, validateExtras } = require('./extension/regex-validation.js');
 
 const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
-assert.deepStrictEqual(JSON.parse(fs.readFileSync('extension/manifest.json', 'utf8')), manifest);
 assert.strictEqual(manifest.version, require('./package.json').version);
 assert.strictEqual(manifest.version, require('./.claude-plugin/plugin.json').version);
 const stoplistSource = fs.readFileSync('core/pii.js', 'utf8').match(/const NAME_STOPLIST = new Set\('([^']+)'\.split\(' '\)\)/);

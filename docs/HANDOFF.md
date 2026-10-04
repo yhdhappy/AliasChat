@@ -104,7 +104,7 @@ PrivyAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用
 ## 上架前收尾（2026-10-04，0.7.0）
 
 - 隐私政策链接统一为 `https://yhdhappy.github.io/PrivyAI/privacy.html`，Pages 已开启。
-- 版本统一为 0.7.0；补充 `extension/manifest.json`，与根目录兼容入口保持一致。
+- 版本统一为 0.7.0；当时补充的 `extension/manifest.json` 副本现已删除，根目录 `manifest.json` 是唯一清单。
 - PDF/图片默认拦截通过 `opaque-blocked` 错误码显示专用提示；options 说明允许上传的方法和文件不会被遮蔽的风险。
 - 删除页面 `map-clear` 接口；映射继续保存在 `chrome.storage.session`，页面消息不能清除映射。
 - NAME_STOPLIST 仅保留指定的 11 个常见词；新增去重、姓氏重复遮蔽、上传拦截和实际 zip 内容回归检查。
