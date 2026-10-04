@@ -59,7 +59,7 @@ Justification for each: processed only inside the open tab to find and replace p
 Tick all three certifications: not sold to third parties, not used for purposes unrelated to the single purpose, not used for creditworthiness or lending.
 
 - No remote code. All scripts are packaged.
-- Privacy policy URL: https://yhdhappy.github.io/privyAI/privacy.html (enable GitHub Pages from the docs/ folder first)
+- Privacy policy URL: https://yhdhappy.github.io/PrivyAI/privacy.html
 
 ## Assets to upload
 

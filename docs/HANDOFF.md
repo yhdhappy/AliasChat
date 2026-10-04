@@ -72,9 +72,9 @@ PrivyAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用
    - 路径：`/Users/yhd/Documents/AI_Workspace/privyAI`（误 clone 的）
    - 要做：确认删除（之前移废纸篓审批超时，未确认）。
 
-5. **GitHub Pages 开通**
-   - 仓库 Settings → Pages，选 main 分支的 docs 文件夹。
-   - 目的：让 `https://yhdhappy.github.io/privyAI/privacy.html` 生效（商店隐私政策 URL 用）。
+5. **GitHub Pages 开通（已完成）**
+   - 已开启：main 分支的 docs 文件夹。
+   - 目的：让 `https://yhdhappy.github.io/PrivyAI/privacy.html` 生效（商店隐私政策 URL 用）。
 
 ### 战略备忘（2026-10-04 达叔定）
 6. **目标市场 = 海外英文用户，不指望国内**
