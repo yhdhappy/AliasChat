@@ -95,6 +95,9 @@
   window.fetch = async function (input, init) {
     try {
       const url = input instanceof Request ? input.url : String(input);
+      if (/claude\.ai|chatgpt\.com|chat\.openai\.com/.test(url)) {
+        try { const u = new URL(url); show(`[diag] fetch ${u.pathname.slice(0, 80)}`, 4000); } catch {}
+      }
       if (init && init.body != null) init = { ...init, body: await maskBody(url, init.body) };
       else if (input instanceof Request && input.body && isChatRequest(url)) input = new Request(input, { body: await maskBody(url, await input.clone().arrayBuffer()) });
     } catch (error) {
