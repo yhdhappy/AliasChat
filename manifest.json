@@ -41,7 +41,6 @@
         "core/pii.js",
         "core/zip.js",
         "core/office.js",
-        "extension/rewrite.js",
         "extension/files.js",
         "extension/bridge.js"
       ],

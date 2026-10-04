@@ -1,7 +1,28 @@
 (() => {
   const { mask, unmask, deepMap, configure } = globalThis.pii;
-  const { rewrite } = globalThis.piiRewrite;
   const { maskFile, classify } = globalThis.mask2aiFiles;
+  // Inlined from extension/rewrite.js: rewrite.js is also loaded in the MAIN
+  // world, and Chrome does not reliably provide its global in the isolated
+  // world when the same file appears in both. Inlining removes the dependency.
+  const TEXT_KEYS = new Set(['prompt', 'parts', 'extracted_content', 'text', 'content']);
+  const walk = (v, key, maskFn, found) => typeof v === 'string' ? (TEXT_KEYS.has(key) ? maskFn(v, found) : v)
+    : Array.isArray(v) ? v.map(x => walk(x, key, maskFn, found))
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, k, maskFn, found)]))
+    : v;
+  const rewriteJson = (text, maskFn, found) => JSON.stringify(walk(JSON.parse(text), '', maskFn, found));
+  const rewriteForm = (text, maskFn, found) => {
+    const params = new URLSearchParams(text);
+    for (const [k, v] of [...params.entries()]) {
+      if (TEXT_KEYS.has(k)) params.set(k, maskFn(v, found));
+      else if (/^[[{]/.test(v)) {
+        let parsed;
+        try { parsed = JSON.parse(v); } catch { continue; }
+        params.set(k, JSON.stringify(walk(parsed, '', maskFn, found)));
+      }
+    }
+    return params.toString();
+  };
+  const rewrite = (bodyText, maskFn, found) => /^\s*[[{]/.test(bodyText) ? rewriteJson(bodyText, maskFn, found) : rewriteForm(bodyText, maskFn, found);
   const token = [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
   const map = new Map();
   let salt;
