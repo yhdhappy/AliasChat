@@ -101,9 +101,15 @@
     .flat();
 
   const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const NAME_STOPLIST = new Set('will may mark grace bill chase penny amber crystal summer autumn reed clay stone ford banks cook hunter fisher mason carter cooper parker porter taylor weaver hunter bailey carter hunter'.split(' '));
   const repeatedNames = found => Object.entries(found)
     .filter(([p]) => p.startsWith('__PII_NAME_'))
-    .flatMap(([, name]) => [...new Set([name, name.toLowerCase(), name.toUpperCase(), name.toLowerCase().replace(/(^|[ \t])\p{L}/gu, s => s.toUpperCase())])])
+    .flatMap(([, name]) => {
+      const words = name.trim().split(/\s+/);
+      if (words.length >= 2) return [...new Set([name, name.toLowerCase(), name.toUpperCase(), name.toLowerCase().replace(/(^|[ \t])\p{L}/gu, s => s.toUpperCase())])];
+      if (NAME_STOPLIST.has(name.toLowerCase())) return [];
+      return [name];
+    })
     .sort((a, b) => b.length - a.length)
     .map(name => new RegExp('(?<![\\p{L}\\p{N}_])' + escape(name) + '(?![\\p{L}\\p{N}_])', 'gu'));
 
