@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VeilAI is on</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #0f0f1a; color: #e8e8f0;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 24px; line-height: 1.6;
+  }
+  .card {
+    max-width: 560px; width: 100%;
+    background: #1a1a2e; border: 1px solid #2d2d4a; border-radius: 16px;
+    padding: 40px;
+  }
+  .logo { font-size: 40px; margin-bottom: 8px; }
+  h1 { font-size: 26px; margin-bottom: 8px; color: #fff; }
+  .sub { color: #a0a0c0; margin-bottom: 24px; font-size: 15px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px; color: #8b7cf6; margin: 24px 0 8px; }
+  p, li { font-size: 14px; color: #c8c8e0; }
+  ul { padding-left: 20px; margin: 8px 0; }
+  li { margin-bottom: 6px; }
+  .btn {
+    display: inline-block; margin-top: 28px;
+    background: #6b21a8; color: #fff; border: none; border-radius: 10px;
+    padding: 12px 40px; font-size: 16px; cursor: pointer;
+  }
+  .btn:hover { background: #7c2cc0; }
+  .links { margin-top: 20px; font-size: 13px; }
+  .links a { color: #8b7cf6; text-decoration: none; margin-right: 16px; }
+  .links a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">🛡️</div>
+  <h1>VeilAI is on</h1>
+  <p class="sub">Masks personal data in your messages before they reach ChatGPT or Claude. The AI only sees placeholders; you see the real values.</p>
+
+  <h2>How your data is handled</h2>
+  <ul>
+    <li>All masking happens locally in your browser. Nothing is uploaded to any server.</li>
+    <li>The placeholder map is kept in the browser's session storage — in-memory only, cleared when you close the browser. Web pages cannot access it.</li>
+    <li>Optional settings you save are synced via your own browser account (chrome.storage.sync).</li>
+    <li>VeilAI does not collect analytics, telemetry, or any data about you.</li>
+  </ul>
+
+  <h2>Limitations</h2>
+  <ul>
+    <li>Detection is pattern-based. Names without context, or data in formats we don't recognize, may not be masked.</li>
+    <li>PDF and image uploads are blocked by default (they are not inspected in the browser).</li>
+  </ul>
+
+  <button class="btn" id="gotit">Got it</button>
+
+  <div class="links">
+    <a href="https://yhdhappy.github.io/veilAI/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>
+    <a href="https://github.com/yhdhappy/veilAI" target="_blank" rel="noopener">GitHub (open source)</a>
+  </div>
+</div>
+<script>
+  document.getElementById('gotit').addEventListener('click', () => window.close());
+</script>
+</body>
+</html>
