@@ -1,5 +1,4 @@
 (() => {
-  console.log('[VeilAI-debug] bridge.js running, pii =', typeof globalThis.pii, ', piiRewrite =', typeof globalThis.piiRewrite, ', mask2aiFiles =', typeof globalThis.mask2aiFiles);
   const { mask, unmask, deepMap, configure } = globalThis.pii;
   const { rewrite } = globalThis.piiRewrite;
   const { maskFile, classify } = globalThis.mask2aiFiles;

@@ -1,6 +1,7 @@
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./zip.js'));
-  else root.mask2aiOffice = factory(root.mask2aiZip);
+  const api = typeof module === 'object' && module.exports ? factory(require('./zip.js')) : factory(root.mask2aiZip);
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  root.mask2aiOffice = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (zip) {
   const td = new TextDecoder();
   const te = new TextEncoder();

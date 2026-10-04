@@ -1,6 +1,7 @@
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('../core/office.js'));
-  else root.mask2aiFiles = factory(root.mask2aiOffice);
+  const api = typeof module === 'object' && module.exports ? factory(require('../core/office.js')) : factory(root.mask2aiOffice);
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  root.mask2aiFiles = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (office) {
   const TEXT = /\.(txt|md|markdown|csv|tsv|json|xml|html?|ya?ml|log|rtf|js|ts|py|java|sql)$/i;
   const OPAQUE = /\.(pdf|png|jpe?g|gif|webp|heic|bmp|tiff?)$/i;

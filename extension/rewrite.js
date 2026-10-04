@@ -1,8 +1,7 @@
 (function (root, factory) {
-  console.log('[VeilAI-debug] rewrite.js running, typeof module =', typeof module, ', typeof globalThis =', typeof globalThis);
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.piiRewrite = factory();
-  console.log('[VeilAI-debug] rewrite.js done, piiRewrite set =', typeof root.piiRewrite !== 'undefined');
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  root.piiRewrite = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   const TEXT_KEYS = new Set(['prompt', 'parts', 'extracted_content', 'text', 'content']);
   const isChatRequest = url => /\/(completion|conversation|chat_conversations)(\/[a-z_]+)?(\?|$)/.test(url.split('#')[0]);

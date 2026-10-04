@@ -1,6 +1,7 @@
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.mask2aiZip = factory();
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  root.mask2aiZip = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   const td = new TextDecoder();
   const te = new TextEncoder();

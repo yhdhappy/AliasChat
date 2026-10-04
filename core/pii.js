@@ -1,6 +1,7 @@
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.pii = factory();
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  root.pii = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   const hash = s => {
     let h1 = 0xdeadbeef;
