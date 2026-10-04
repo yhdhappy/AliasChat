@@ -14,7 +14,9 @@
     for (const [k, v] of [...params.entries()]) {
       if (TEXT_KEYS.has(k)) params.set(k, mask(v, found));
       else if (/^[[{]/.test(v)) {
-        try { params.set(k, rewriteJson(v, mask, found)); } catch {}
+        let parsed;
+        try { parsed = JSON.parse(v); } catch { continue; }
+        params.set(k, JSON.stringify(walk(parsed, '', mask, found)));
       }
     }
     return params.toString();

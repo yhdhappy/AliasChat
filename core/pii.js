@@ -12,7 +12,7 @@
     }
     h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
     h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-    return ((h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0')).slice(0, 6);
+    return ((h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0')).slice(0, 12);
   };
 
   const luhn = s => {
@@ -24,6 +24,12 @@
       sum += n;
     }
     return sum % 10 === 0;
+  };
+
+  const chineseId = s => {
+    if (typeof s !== 'string' || s.length !== 18) return false;
+    const weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+    return '10X98765432'[[...s.slice(0, 17)].reduce((sum, d, i) => sum + +d * weights[i], 0) % 11] === s[17].toUpperCase();
   };
 
   const iban = s => {
@@ -42,6 +48,9 @@
   const PATTERNS = [
     ['EMAIL', /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g],
     ['IBAN', /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/g, iban],
+    ['PHONE_CN', /\b1[3-9]\d{9}\b/g],
+    ['ID_CN', /\b[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b/g, chineseId],
+    ['CARD_CN', /\b62\d{14,17}\b/g, luhn],
     ['CARD', /\b[2-6]\d{14,15}\b|\b[2-6]\d{3}(?:[ -]\d{4}){3}\b|\b[2-6]\d{3}[ -]\d{6}[ -]\d{5}\b/g, luhn],
     ['SSN', /\b\d{3}-\d{2}-\d{4}\b/g],
     ['PHONE', /(?:\+|\b00)\d{1,3}[ .-]?\(?\d{1,4}\)?(?:[ .-]?\d{2,4}){2,4}\b|\(\d{3}\)[ .-]?\d{3}[ .-]?\d{4}\b|\b\d{3}[.-]\d{3}[.-]\d{4}\b|\b0\d{4} ?\d{6}\b/g],
@@ -69,15 +78,15 @@
     config.extra = (cfg && cfg.extra || []).map(e => [String(e.type || 'CUSTOM').toUpperCase().replace(/[^A-Z]/g, '') || 'CUSTOM', new RegExp(e.pattern, 'g' + (e.flags || '').replace(/g/g, ''))]);
     return config;
   };
-  const PLACEHOLDER = /__PII_[A-Z]+_[0-9a-f]{6}__/g;
-  const hasPlaceholder = s => /__PII_[A-Z]+_[0-9a-f]{6}__/.test(s);
+  const PLACEHOLDER = /__PII_[A-Z_]+_(?:[0-9a-f]{12}|[0-9a-f]{6})__/g;
+  const hasPlaceholder = s => /__PII_[A-Z_]+_(?:[0-9a-f]{12}|[0-9a-f]{6})__/.test(s);
 
-  const apply = (text, type, re, check, found) => text.replace(re, (...args) => {
+  const apply = (text, type, re, check, found, salt) => text.replace(re, (...args) => {
     const m = args[0];
     const val = typeof args[1] === 'string' ? args[1] : m;
     if (check && !check(val)) return m;
     if (config.allow.has(val)) return m;
-    const p = `__PII_${type}_${hash(val)}__`;
+    const p = `__PII_${type}_${hash(salt ? salt + '\0' + val : val)}__`;
     found[p] = val;
     return m.replace(val, p);
   });
@@ -90,9 +99,17 @@
     .filter(res => res.every(re => re.test(text)))
     .flat();
 
-  const mask = (text, found) => {
-    for (const [type, re, check] of [...PATTERNS, ...config.extra]) if (!config.disable.has(type)) text = apply(text, type, re, check, found);
-    if (!config.disable.has('NAME')) for (const re of namesFromEmails(found, text)) text = apply(text, 'NAME', re, null, found);
+  const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const repeatedNames = found => Object.entries(found)
+    .filter(([p]) => p.startsWith('__PII_NAME_'))
+    .flatMap(([, name]) => [...new Set([name, name.toLowerCase(), name.toUpperCase(), name.toLowerCase().replace(/(^|[ \t])\p{L}/gu, s => s.toUpperCase())])])
+    .sort((a, b) => b.length - a.length)
+    .map(name => new RegExp('(?<![\\p{L}\\p{N}_])' + escape(name) + '(?![\\p{L}\\p{N}_])', 'gu'));
+
+  const mask = (text, found, salt = '') => {
+    for (const [type, re, check] of [...PATTERNS, ...config.extra]) if (!config.disable.has(type)) text = apply(text, type, re, check, found, salt);
+    if (!config.disable.has('NAME')) for (const re of namesFromEmails(found, text)) text = apply(text, 'NAME', re, null, found, salt);
+    if (!config.disable.has('NAME')) for (const re of repeatedNames(found)) text = apply(text, 'NAME', re, null, found, salt);
     return text;
   };
   const unmask = (text, map) => text.replace(PLACEHOLDER, p => map[p] ?? p);
@@ -101,5 +118,5 @@
     : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, deepMap(x, fn)]))
     : v;
 
-  return { mask, unmask, luhn, iban, hasPlaceholder, deepMap, PLACEHOLDER, TYPES, configure };
+  return { mask, unmask, luhn, iban, chineseId, hasPlaceholder, deepMap, PLACEHOLDER, TYPES, configure };
 });

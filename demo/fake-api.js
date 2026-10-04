@@ -42,12 +42,12 @@ http.createServer((req, res) => {
       if (done === 0) return res.end(reply([{ type: 'text', text: 'Reading the PDF first.' }, { type: 'tool_use', id: 'toolu_' + Date.now(), name: 'Read', input: { file_path: path.join(__dirname, 'customer.pdf') } }], 'tool_use'));
       if (done === 1) return res.end(reply([{ type: 'text', text: 'Now the image.' }, { type: 'tool_use', id: 'toolu_' + Date.now(), name: 'Read', input: { file_path: path.join(__dirname, 'customer.png') } }], 'tool_use'));
       const pdfText = msg.messages.flatMap(m => Array.isArray(m.content) ? m.content : []).filter(b => b.type === 'tool_result').map(b => typeof b.content === 'string' ? b.content : '').join('\n');
-      const pick = type => (pdfText.match(new RegExp(`__PII_${type}_[0-9a-f]{6}__`)) || ['unknown'])[0];
+      const pick = type => (pdfText.match(new RegExp(`__PII_${type}_[0-9a-f]{12}__`)) || ['unknown'])[0];
       return res.end(reply([{ type: 'text', text: `Both files are the same customer record.\n\nThe PDF reached me as text with placeholders: name ${pick('NAME')}, email ${pick('EMAIL')}, phone ${pick('PHONE')}, SSN ${pick('SSN')}.\n\nThe image reached me with those four values blacked out; I can read the labels Name, Email, Phone and SSN but not what follows them.\n\nSo I can confirm the record exists and what fields it has, without having seen the personal data itself.` }], 'end_turn'));
     }
     if (tool) {
       const text = tool;
-      const pick = type => (text.match(new RegExp(`__PII_${type}_[0-9a-f]{6}__`)) || ['unknown'])[0];
+      const pick = type => (text.match(new RegExp(`__PII_${type}_[0-9a-f]{12}__`)) || ['unknown'])[0];
       return res.end(reply([{ type: 'text', text: `Found her in the file.\n\nEmail: ${pick('EMAIL')}\nPhone: ${pick('PHONE')}\nSSN: ${pick('SSN')}\n\nI only see placeholders for the personal data, which is what VeilAI sends me. Here is the reminder:\n\nSubject: Invoice 1042 is overdue\n\nHi, a quick reminder that invoice 1042 is now past its due date. Please arrange payment or reply if something is wrong. Thank you.` }], 'end_turn'));
     }
     if (/customers\.csv/i.test(text)) return res.end(reply([{ type: 'text', text: 'Let me look up her details in the file.' }, { type: 'tool_use', id: 'toolu_' + Date.now(), name: 'Read', input: { file_path: target } }], 'tool_use'));

@@ -79,7 +79,7 @@ server.listen(0, '127.0.0.1', async () => {
   const wire = JSON.stringify(requests);
   const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, m => '\\' + m);
   const leaked = secrets.filter(s => new RegExp('(?<![A-Za-z])' + escape(s) + '(?![A-Za-z])', 'u').test(wire));
-  const placeholders = new Set(wire.match(/__PII_[A-Z]+_[0-9a-f]{6}__/g) || []);
+  const placeholders = new Set(wire.match(/__PII_[A-Z_]+_[0-9a-f]{12}__/g) || []);
   console.log(`\n   placeholders on the wire: ${placeholders.size}`);
   console.log(`   personal data on the wire: ${leaked.length ? 'LEAKED ' + leaked.join(', ') : 'none'}`);
   for (const s of leaked) for (const m of wire.matchAll(new RegExp('(?<![A-Za-z])' + escape(s) + '(?![A-Za-z])', 'gu'))) console.log(`   context: …${wire.slice(Math.max(0, m.index - 80), m.index + s.length + 40).replace(/\s+/g, ' ')}…`);
@@ -93,7 +93,7 @@ server.listen(0, '127.0.0.1', async () => {
     if (c.code !== 0) fail(`claude exited ${c.code}\n${c.out}`);
     const pdfWire = JSON.stringify(c.batch);
     const pdfLeaked = secrets.filter(s => pdfWire.includes(s));
-    const pdfPlaceholders = (pdfWire.match(/__PII_[A-Z]+_[0-9a-f]{6}__/g) || []).length;
+    const pdfPlaceholders = (pdfWire.match(/__PII_[A-Z_]+_[0-9a-f]{12}__/g) || []).length;
     console.log(`   PDF arrived as text with ${pdfPlaceholders} placeholders, raw PDF bytes on the wire: ${pdfWire.includes('JVBERi') ? 'YES' : 'no'}, personal data: ${pdfLeaked.length ? 'LEAKED ' + pdfLeaked.join(', ') : 'none'}`);
     if (pdfWire.includes('JVBERi')) { const at = pdfWire.indexOf('JVBERi'); console.log('   context: …' + pdfWire.slice(Math.max(0, at - 300), at + 40).replace(/\s+/g, ' ') + '…'); }
     if (pdfLeaked.length || !pdfPlaceholders || pdfWire.includes('JVBERi')) process.exit(1);

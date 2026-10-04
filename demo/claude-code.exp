@@ -30,7 +30,7 @@ type "Email jane.doe@example.com and tell her invoice 1042 is overdue and confir
 pause 1200
 send "\033\[13;1u"
 pause 5000
-type "Email __PII_EMAIL_ae44b4__ and tell her invoice 1042 is overdue and confirm her SSN and TC number from demo/customers.csv"
+type "Email __PII_EMAIL_ae44b4707e84__ and tell her invoice 1042 is overdue and confirm her SSN and TC number from demo/customers.csv"
 pause 1200
 send "\033\[13;1u"
 pause 12000

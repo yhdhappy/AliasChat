@@ -50,7 +50,7 @@ Google requires disclosure even when data is only processed locally, so tick the
 - Personal communications (the chat message being sent)
 - Website content (the rendered chat page and uploaded files)
 
-Justification for each: processed only inside the open tab to find and replace personal data; never transmitted, stored outside the tab's sessionStorage, or shared.
+Justification for each: processed only inside the open tab to find and replace personal data; never transmitted, kept only in the extension's isolated memory for the life of the tab, or shared.
 
 Tick all three certifications: not sold to third parties, not used for purposes unrelated to the single purpose, not used for creditworthiness or lending.
 

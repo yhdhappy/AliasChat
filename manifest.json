@@ -25,11 +25,7 @@
         "https://chat.openai.com/*"
       ],
       "js": [
-        "core/pii.js",
-        "core/zip.js",
-        "core/office.js",
         "extension/rewrite.js",
-        "extension/files.js",
         "extension/content.js"
       ],
       "run_at": "document_start",
@@ -42,6 +38,11 @@
         "https://chat.openai.com/*"
       ],
       "js": [
+        "core/pii.js",
+        "core/zip.js",
+        "core/office.js",
+        "extension/rewrite.js",
+        "extension/files.js",
         "extension/bridge.js"
       ],
       "run_at": "document_start"

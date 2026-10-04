@@ -23,10 +23,11 @@ VeilAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用�
   - 去 Turkish：删 TCKN 校验+模式、PLATE、土耳其地址/DOB/证件/姓名线索、FOLD 字符映射、土耳其手机号格式；保留 `\b0\d{4} ?\d{6}\b`（实为英国手机号，测试要求）
   - 刻意保留的内部标识（兼容性）：MASK2AI_CONFIG、`~/.mask2ai/config.json`、`.mask2ai.json`、`data-mask2ai`、`mask2ai-config` postMessage、`~/.claude/veilAI`（已改名）、JS 命名空间
   - `npm test` 通过（ok / office ok）
-- [ ] Phase 1b：安全修复（Claude 网页版审计报告 10 项问题，达叔已批用 gpt-6.1-sol）
-  - 修：①同名二次扫描 ③postMessage token 加固 ④fail-closed+toast ⑥哈希加长+会话盐 ⑦迁 chrome.storage.session ⑧自定义正则保存校验 ⑩XHR 拦截 ②结构化中文格式（手机/身份证/银联卡）
-  - 不修：⑨（CLI 插件范围外）②中文姓名/地址（要 NER，Phase 2）
-  - 待达叔：⑤ retry_completion 需真账号抓包验证；⑩需真站验证
+- [x] Phase 1b：安全修复（2026-10-04 上午，Codex gpt-6.1-sol 执行，pi deepseek-v4.1-flash 审查 PASS，3 处小问题已修）
+  - 修了 8 项：同名二次遮蔽、中国手机号/身份证/银联卡识别、postMessage token 加固、出错拦下不放行、占位符 12 位+每会话盐、对照表搬进插件隔离区、自定义正则安检、XHR 拦截
+  - pi 揪出：同步 XHR 非聊天上传被误拦（已修）、身份证校验缺长度保护（已修）、商店文案过时（已修）
+  - `npm test` 通过（ok / office ok / security ok）
+  - 架构变化：content.js 只跑 MAIN world 做拦截，遮蔽/还原逻辑搬到 bridge.js（隔离世界），对照表不再经页面
 - [ ] Phase 2：物料（截图、商店描述）
 - [ ] Phase 3：Gumroad 上架 + license 验证接入
 - [ ] Phase 4：Chrome 商店上架（$5 达叔付）+ Edge（注意：store/listing.md 的 privacy policy URL 目前是 GitHub 仓库地址，上架前需换成真实隐私政策页）

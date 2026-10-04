@@ -72,7 +72,7 @@ assert(!isChatRequest("https://chatgpt.com/backend-api/me"));
 assert(!isChatRequest("https://chatgpt.com/unauth-mweb/sentinel/ping"));
 const ff = {};
 const form = new URLSearchParams(rewrite("conversationState=" + encodeURIComponent(JSON.stringify({ backendConversationId: "6aad6fb5", messages: [{ content: "old mail ali@example.com" }] })) + "&prompt=" + encodeURIComponent("Say ok. Ref probe.person@example.org") + "&chatRequirementsToken=gAAAAABqrW_omd7nK", mask, ff));
-assert(/^Say ok\. Ref __PII_EMAIL_[0-9a-f]{6}__$/.test(form.get("prompt")), form.get("prompt"));
+assert(/^Say ok\. Ref __PII_EMAIL_[0-9a-f]{12}__$/.test(form.get("prompt")), form.get("prompt"));
 assert(JSON.parse(form.get("conversationState")).messages[0].content.startsWith("old mail __PII_EMAIL_"));
 assert.strictEqual(form.get("chatRequirementsToken"), "gAAAAABqrW_omd7nK");
 assert.deepStrictEqual(Object.values(ff).sort(), ["ali@example.com", "probe.person@example.org"]);
@@ -83,7 +83,7 @@ assert(!claudeBody.prompt.includes("ali@") && !claudeBody.attachments[0].extract
 assert.strictEqual(claudeBody.parent_message_uuid, "550e8400-e29b-41d4-a716-446655440000");
 const fg = {};
 const gptBody = JSON.parse(rewrite(JSON.stringify({ action: "next", messages: [{ content: { content_type: "text", parts: ["call +90 532 123 45 67"] } }], model: "auto" }), mask, fg));
-assert(/^call __PII_PHONE_[0-9a-f]{6}__$/.test(gptBody.messages[0].content.parts[0]) && gptBody.model === "auto");
+assert(/^call __PII_PHONE_[0-9a-f]{12}__$/.test(gptBody.messages[0].content.parts[0]) && gptBody.model === "auto");
 
 (async () => {
   const te = new TextEncoder();
@@ -112,7 +112,7 @@ assert(/^call __PII_PHONE_[0-9a-f]{6}__$/.test(gptBody.messages[0].content.parts
   const maskedDoc = new TextDecoder().decode((await zip.read(new Uint8Array(await maskedDocx.arrayBuffer()))).find(e => e.name === "word/document.xml").data);
   assert(!maskedDoc.includes("jane.doe") && maskedDoc.includes("__PII_EMAIL_"), maskedDoc);
   const txt = await files.maskFile(new File(["call +1 555 555 5555"], "notes.txt", { type: "text/plain" }), mask, {});
-  assert.strictEqual(await txt.text(), "call __PII_PHONE_ddab37__");
+  assert.strictEqual(await txt.text(), mask("call +1 555 555 5555", {}));
   const pdf = new File([new Uint8Array([37, 80, 68, 70])], "scan.pdf", { type: "application/pdf" });
   assert.strictEqual(await files.maskFile(pdf, mask, {}), pdf);
   const warned = [];
@@ -128,25 +128,32 @@ assert(/^call __PII_PHONE_[0-9a-f]{6}__$/.test(gptBody.messages[0].content.parts
   console.log("office ok");
 })().catch(e => { console.error(e); process.exit(1); });
 
-assert.deepStrictEqual(TYPES, ["EMAIL", "IBAN", "CARD", "SSN", "PHONE", "ADDRESS", "DOB", "ID", "IP", "NAME"]);
+assert.deepStrictEqual(TYPES, ["EMAIL", "IBAN", "PHONE_CN", "ID_CN", "CARD_CN", "CARD", "SSN", "PHONE", "ADDRESS", "DOB", "ID", "IP", "NAME"]);
 configure({ disable: ["SSN"], allow: ["support@acme.com"], extra: [{ type: "employee id", pattern: "EMP-\\d{6}" }] });
 const mc = mask("ssn 123-45-6789, mail support@acme.com and jane.doe@example.com, badge EMP-123456", {});
 assert(mc.includes("123-45-6789") && mc.includes("support@acme.com"), mc);
-assert(!mc.includes("jane.doe") && /__PII_EMPLOYEEID_[0-9a-f]{6}__/.test(mc), mc);
+assert(!mc.includes("jane.doe") && /__PII_EMPLOYEEID_[0-9a-f]{12}__/.test(mc), mc);
 configure({ disable: ["NAME"] });
 assert(mask("Dr. Jane Doe and jane.doe@example.com", {}).includes("Jane Doe"));
 configure({});
 assert(!mask("Dr. Jane Doe", {}).includes("Jane Doe"));
 
 const data = fs.mkdtempSync(path.join(os.tmpdir(), 'mask2ai-'));
+const hookSource = fs.readFileSync(path.join(__dirname, 'hooks/mask.js'), 'utf8');
+const hookRequire = require('module').createRequire(path.join(__dirname, 'hooks/mask.js'));
 const run = input => {
-  const r = spawnSync(process.execPath, [path.join(__dirname, 'hooks/mask.js')], {
-    input: JSON.stringify({ session_id: 's1', ...input }),
-    env: { CLAUDE_PLUGIN_DATA: data, PATH: '' },
-    encoding: 'utf8'
-  });
-  assert.strictEqual(r.status, 0, r.stderr);
-  return r.stdout ? JSON.parse(r.stdout) : null;
+  let output = '';
+  const hookModule = {};
+  const inputText = JSON.stringify({ session_id: 's1', ...input });
+  const isolatedRequire = name => name === 'fs' ? { ...fs, readFileSync: (file, ...args) => file === 0 ? inputText : fs.readFileSync(file, ...args) } : hookRequire(name);
+  isolatedRequire.main = hookModule;
+  require('vm').runInNewContext(hookSource, {
+    require: isolatedRequire,
+    module: hookModule,
+    __dirname: path.join(__dirname, 'hooks'),
+    process: { env: { CLAUDE_PLUGIN_DATA: data, PATH: '' }, platform: process.platform, stdout: { write: text => { output += text; } } }
+  }, { filename: 'hooks/mask.js', timeout: 10000 });
+  return output ? JSON.parse(output) : null;
 };
 
 assert.strictEqual(run({ hook_event_name: 'UserPromptSubmit', prompt: 'refactor the login page' }), null);
@@ -154,11 +161,11 @@ const blocked = run({ hook_event_name: 'UserPromptSubmit', prompt: 'email ali@ex
 assert.strictEqual(blocked.decision, 'block');
 assert(blocked.suppressOriginalPrompt);
 assert(!blocked.reason.includes('ali@example.com'));
-assert(/__PII_EMAIL_[0-9a-f]{6}__/.test(blocked.reason));
+assert(/__PII_EMAIL_[0-9a-f]{12}__/.test(blocked.reason));
 
 const post = run({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_response: { stdout: 'owner: veli@example.com\n', stderr: '', interrupted: false, isImage: false } });
 const ph = post.hookSpecificOutput.updatedToolOutput.stdout.trim().split(' ')[1];
-assert(/^__PII_EMAIL_[0-9a-f]{6}__$/.test(ph), ph);
+assert(/^__PII_EMAIL_[0-9a-f]{12}__$/.test(ph), ph);
 assert.deepStrictEqual(Object.keys(post.hookSpecificOutput.updatedToolOutput), ['stdout', 'stderr', 'interrupted', 'isImage']);
 assert.strictEqual(post.systemMessage, 'VeilAI: masked 1 value in Bash output');
 assert(run({ hook_event_name: 'SessionStart', source: 'startup' }).systemMessage.startsWith('VeilAI active'));

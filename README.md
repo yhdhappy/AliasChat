@@ -58,7 +58,7 @@ A real chat on chatgpt.com in Chrome with the extension loaded. The purple capti
 | Person name | after a title (`Dr.`), a cue (`my name is`, `Regards,`), a label (`name:`, `"firstName":`), or derived from a masked email (`jane.doe@` also hides `Jane` and `Doe`) | shape check |
 | Street address | after an `address:` label or US and UK street shapes | shape check |
 
-Detection is pattern based. Structured identifiers are matched reliably. Names and addresses are matched when there is a signal around them: a label, a title, a cue or a matching email. A bare name in free text with none of these passes through, and semantic facts such as health, religion or income are not detected. See Limits.
+Detection is pattern based. Structured identifiers are matched reliably. Names and addresses are matched when there is a signal around them: a label, a title, a cue or a matching email. Other exact occurrences of a detected name, including lower and upper case forms, are also masked. A bare name with no detection signal passes through, and semantic facts such as health, religion or income are not detected. See Limits.
 
 ## Files
 
@@ -145,7 +145,7 @@ Expected: a toast "VeilAI: masked 3 values before sending" appears bottom right,
 **In Chrome**
 
 - A toast reports how many values were masked each time you send a message.
-- The assistant replies with placeholders; the page shows the real values. The placeholder map lives in the tab's `sessionStorage` and is gone when the tab closes.
+- The assistant replies with placeholders; the page shows the real values. The placeholder map stays in the extension's isolated world and is discarded when the page reloads or the tab closes.
 
 ## Configuration
 
@@ -161,7 +161,7 @@ Everything is on by default. One JSON object turns detector types off, adds your
 
 | Key | Meaning |
 | --- | --- |
-| `disable` | Types to switch off: `EMAIL`, `IBAN`, `CARD`, `SSN`, `PHONE`, `ADDRESS`, `DOB`, `ID`, `IP`, `NAME`. |
+| `disable` | Types to switch off: `EMAIL`, `IBAN`, `CARD`, `CARD_CN`, `SSN`, `PHONE`, `PHONE_CN`, `ID_CN`, `ADDRESS`, `DOB`, `ID`, `IP`, `NAME`. |
 | `extra` | Your own detectors: a `type` name that becomes the placeholder label and a JavaScript regular expression in `pattern`, with optional `flags`. Matches are masked and restored like everything else. |
 | `allow` | Exact values that are never masked, such as a shared support address. |
 
@@ -215,11 +215,11 @@ If you prefer your own instrument, point `ANTHROPIC_BASE_URL` at a logging proxy
 
 **Detection is an ordered pattern list** in `core/pii.js`. Each entry is a type, a regular expression and an optional validator. Emails run first so their digits are not later read as phones; cards and IBANs run before phones for the same reason. Label, title and cue patterns capture only the value, and a shape check rejects values such as `name: VeilAI` or `address: 0x7fff`. Generic labels such as `name:` or `owner:` only match two or more capitalised words, so `"name": "Bash"` in JSON or `owner: Docker` in config files is left alone; `firstName:` and `surname:` still take a single word. After the static pass, the local part of every masked email is split into tokens, and each token is masked where it appears capitalised or in capitals, which is how `jane.doe@` also hides `Jane` and `DOE` in a CSV column.
 
-**Placeholders are content-addressed.** A value becomes `__PII_<TYPE>_<6 hex digits of a hash of the value>__`. The same value yields the same placeholder in a prompt, a file read and a grep result without a lookup, hooks running in parallel cannot disagree, and after a resume a single re-read rebuilds the map. Underscores keep the token a single word for the model and harmless inside code.
+**Placeholders are content-addressed.** A value becomes `__PII_<TYPE>_<12 hex digits of a hash of the value>__`. The same value yields the same placeholder in a prompt, a file read and a grep result without a lookup, hooks running in parallel cannot disagree, and after a resume a single re-read rebuilds the map. Underscores keep the token a single word for the model and harmless inside code.
 
 **The map is a local append-only file.** Placeholder to value pairs are appended as JSON lines to `$CLAUDE_PLUGIN_DATA/<session_id>.jsonl`, created with mode `0600`. Small appends are atomic on POSIX, so parallel tool calls never lose an entry. Maps are kept for 30 days so resumed sessions can still restore, then pruned.
 
-**The extension** (`manifest.json`, `extension/`) injects `core/pii.js`, `extension/rewrite.js` and `extension/content.js` into claude.ai and chatgpt.com at `document_start` in the page's main world. `content.js` wraps `window.fetch`. For requests to the chat endpoints it decodes the body, whether a JSON string, a form body, a byte array or a gzip-compressed byte array, masks the text fields (`prompt`, `parts`, `extracted_content`, `text`, `content`), re-encodes it in the original form and forwards it. A `MutationObserver` restores placeholders in rendered text, skipping editable fields.
+**The extension** (`manifest.json`, `extension/`) wraps `window.fetch` and asynchronous `XMLHttpRequest` at `document_start`. The detection core and placeholder map live in `bridge.js` in the extension's isolated world; the page wrapper requests masking and restoration through a token-bearing `postMessage` protocol. A random salt generated by the page wrapper makes placeholders differ between page loads. Only the first config handshake is accepted; page scripts can still observe the token, preempt that handshake or forge operation messages, so this protocol is not an authentication boundary. For requests to the chat endpoints it decodes the body, whether a JSON string, a form body, a byte array or a gzip-compressed byte array, masks the text fields (`prompt`, `parts`, `extracted_content`, `text`, `content`), re-encodes it in the original form and forwards it. A `MutationObserver` restores placeholders in rendered text, skipping editable fields. XHR text and JSON responses are restored before completion events reach listeners. Masking errors block the request and show a VeilAI toast; restoration errors leave placeholders intact. Custom regex patterns are checked in a terminable worker against 2000-character stress inputs with a 100ms limit before saving. This timing check cannot prove a pattern safe for every possible input.
 
 **What still leaves the machine.** Placeholders, everything the patterns do not recognise, file paths, and your prompt once you resend it in masked form.
 
