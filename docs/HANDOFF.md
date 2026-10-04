@@ -50,3 +50,38 @@ VeilAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用�
 - 收款：Gumroad → Lemon Squeezy → Paddle
 - 获客：Product Hunt、Hacker News Show HN、Reddit
 - 后期：AppSumo
+
+## 待办修改清单（2026-10-04 记，等 Claude Chat 审核完统一改）
+> 达叔指示：先记下来，等 Claude 审核完毕后，与审核发现的问题一起统一修改。
+
+### 代码层面（Muse/Codex 执行）
+1. **首次运行同意弹窗（高优先级，Chrome 8月新规强制）**
+   - 背景：2026年7月1日宣布、8月1日执行的 Chrome 商店新规要求：所有数据处理必须在产品界面内显著公示并拿到明确同意，隐私政策/商店描述不算数。
+   - 要做：插件首次安装时弹一个同意界面，说明"只在本地遮蔽、不上传、占位符对照表存内存、关标签页即销毁"，用户点"我同意"后才开始工作。
+   - 注意：咱们的 `storage` 权限只存用户自己的可选配置，也要在弹窗里说清楚。
+
+2. **仓库 docs/PRODUCT.md 状态校准**
+   - 现状：写着 Phase 1b"进行中"，实际已完成。
+   - 要做：改成"已完成"，与 Mac 本地副本一致。
+
+3. **store/listing.md 按 8 月新规复查**
+   - 对照 extensionbooster 的合规指南，检查 single purpose 描述、数据披露、权限说明是否符合新措辞。
+
+### 达叔动手（Muse 只给步骤）
+4. **Mac 上多余的 veilAI 文件夹**
+   - 路径：`/Users/yhd/Documents/AI_Workspace/veilAI`（误 clone 的）
+   - 要做：确认删除（之前移废纸篓审批超时，未确认）。
+
+5. **GitHub Pages 开通**
+   - 仓库 Settings → Pages，选 main 分支的 docs 文件夹。
+   - 目的：让 `https://yhdhappy.github.io/veilAI/privacy.html` 生效（商店隐私政策 URL 用）。
+
+### 战略备忘（2026-10-04 达叔定）
+6. **目标市场 = 海外英文用户，不指望国内**
+   - 依据：达叔判断"中国人对隐私没那么在意，欧美更注重"；开源在海外是信任硬通货。
+   - 落点：所有文案、推广按英文母语用户写；中文脱敏（身份证/手机号/银联卡）从主卖点降为加分项（海外华人/对华业务场景）。
+   - 竞品：AgentCloak（9月18日免费发布，闭源、无中文）是直接竞品但暂时碰不到中文用户；咱们打"开源+可查代码"差异化。
+
+7. **Pro 版长期考虑（不急）**
+   - AgentCloak 用"数字孪生"（真名换假名如 Julio Schmidt）而非占位符，AI 推理效果更好；可作为 Pro 版升级点调研。
+   - KnowBe4（9月23日发布浏览器插件做企业影子AI管控）验证了企业方向；咱们 Pro 的团队策略/审计日志路线不变。
