@@ -169,6 +169,10 @@
   };
 
   const eligible = node => node.nodeType === 3 && hasPlaceholder(node.data) && !node.parentElement?.closest('[contenteditable], textarea, [data-mask2ai]');
+  const unknownPlaceholders = new Set();
+  const PLACEHOLDER_RE = /__PII_[A-Z_]+_(?:[0-9a-f]{12}|[0-9a-f]{6})__/g;
+  let unmaskWindowStart = 0;
+  let unmaskCount = 0;
   new MutationObserver(async muts => {
     const nodes = new Set();
     for (const m of muts) {
@@ -183,12 +187,28 @@
       }
     }
     if (!nodes.size) return;
-    const targets = [...nodes];
+    const now = Date.now();
+    if (now - unmaskWindowStart > 1000) {
+      unmaskWindowStart = now;
+      unmaskCount = 0;
+    }
+    if (unmaskCount >= 10) return;
+    unmaskCount++;
+    const targets = [...nodes].filter(node => {
+      const placeholders = node.data.match(PLACEHOLDER_RE) || [];
+      return placeholders.some(p => !unknownPlaceholders.has(p));
+    });
+    if (!targets.length) return;
     const original = targets.map(node => node.data);
     try {
       const { body } = await rpc('unmask-request', { body: original });
       if (!Array.isArray(body) || body.length !== targets.length || body.some(text => typeof text !== 'string')) throw new Error('Invalid restoration');
-      const updates = targets.map((node, i) => ({ node, before: original[i], after: body[i] })).filter(({ node, before }) => node.data === before && eligible(node));
+      for (let i = 0; i < targets.length; i++) {
+        const placeholders = original[i].match(PLACEHOLDER_RE) || [];
+        for (const p of placeholders) if (body[i].includes(p)) unknownPlaceholders.add(p);
+      }
+      const updates = targets.map((node, i) => ({ node, before: original[i], after: body[i] })).filter(({ node, before, after }) => after !== before && node.data === before && eligible(node));
+      if (!updates.length) return;
       const applied = [];
       try {
         for (const update of updates) {
