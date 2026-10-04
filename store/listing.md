@@ -12,18 +12,20 @@ Masks names, emails, phone, card and ID numbers before your message reaches clau
 
 VeilAI keeps personal data on your machine when you talk to an AI.
 
-Before a message leaves claude.ai or chatgpt.com, the extension finds email addresses, phone numbers, payment cards, IBANs, national ID and social security numbers, dates of birth, names and street addresses in it and replaces each with a placeholder. The model only ever sees placeholders. The reply comes back with the same placeholders and the page shows you the real values.
+Before a message leaves claude.ai or chatgpt.com, the extension finds email addresses, phone numbers, payment cards, IBANs, national ID and social security numbers, dates of birth, names and street addresses in it and replaces each detected value with a placeholder. The reply comes back with the same placeholders and the page shows you the real values.
 
 - Runs entirely in the page. No server, no account, no telemetry.
 - A toast tells you how many values were masked each time you send.
 - Card numbers are Luhn-checked and IBANs mod-97-checked, so timestamps and version numbers are left alone.
 - Detectors target common English-language labels and formats.
-- The placeholder map lives in the tab and disappears when you close it.
+- The placeholder map is stored in the browser's session storage (cleared when the browser closes) and is never sent anywhere.
 - Open source, MIT: https://github.com/yhdhappy/veilAI
 
 Not affiliated with OpenAI or Anthropic.
 
-Detection is pattern based. A bare name in free text with no title, label or matching email nearby is not detected. Full list of what is and is not caught: https://github.com/yhdhappy/veilAI
+## Limitations
+
+Detection is pattern based. It replaces the personal data it detects, but it cannot guarantee all personal data is caught. A bare name in free text with no title, label or matching email nearby is not detected. PDF and image uploads are blocked by default because their contents cannot be inspected in the browser (you can allow them in the options). Full list of what is and is not caught: https://github.com/yhdhappy/veilAI
 
 ## Single purpose
 
