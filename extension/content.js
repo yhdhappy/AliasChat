@@ -148,6 +148,9 @@
   proto.send = function (body) {
     const state = states.get(this);
     if (!state) return send.call(this, body);
+    if (/claude\.ai|chatgpt\.com|chat\.openai\.com/.test(state.url)) {
+      try { const u = new URL(state.url); show(`[diag] xhr ${u.pathname.slice(0, 80)}`, 4000); } catch {}
+    }
     const chat = isChatRequest(state.url);
     if (!chat && !(body instanceof FormData) && !(body instanceof File)) return send.call(this, body);
     if (!state.async) {
