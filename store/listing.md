@@ -10,6 +10,8 @@ Masks names, emails, phone, card and ID numbers before your message reaches clau
 
 ## Description
 
+Data handling: VeilAI processes your chat messages locally in your browser to find and mask personal data. No data is sent to any server. The placeholder map lives in session storage (in-memory, cleared when you close the browser) and cannot be accessed by web pages. Optional settings sync via your own browser account. No analytics or telemetry.
+
 VeilAI keeps personal data on your machine when you talk to an AI.
 
 Before a message leaves claude.ai or chatgpt.com, the extension finds email addresses, phone numbers, payment cards, IBANs, national ID and social security numbers, dates of birth, names and street addresses in it and replaces each detected value with a placeholder. The reply comes back with the same placeholders and the page shows you the real values.
