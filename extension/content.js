@@ -22,7 +22,7 @@
     if (!request || request.type !== data.type) return;
     pending.delete(data.id);
     clearTimeout(request.timer);
-    data.error ? request.reject(new Error(data.error)) : request.resolve(data.result);
+    data.error ? request.reject(Object.assign(new Error(data.error), { code: data.code })) : request.resolve(data.result);
   });
   window.postMessage({ type: 'mask2ai-ready' }, '*');
   const rpc = (type, payload) => new Promise((resolve, reject) => {
@@ -46,7 +46,9 @@
     (document.body || document.documentElement).appendChild(el);
     if (ms) setTimeout(() => el.remove(), ms);
   };
-  const failure = () => show('could not mask personal data; request blocked', 6000);
+  const failure = error => show(error?.code === 'opaque-blocked'
+    ? 'PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them in PrivyAI options (allowOpaqueUploads).'
+    : 'could not mask personal data; request blocked', 6000);
   document.addEventListener('DOMContentLoaded', () => show('on, personal data is masked before sending', 4000));
 
   const gunzip = bytes => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
@@ -97,7 +99,7 @@
       if (init && init.body != null) init = { ...init, body: await maskBody(url, init.body) };
       else if (input instanceof Request && input.body && isChatRequest(url)) input = new Request(input, { body: await maskBody(url, await input.clone().arrayBuffer()) });
     } catch (error) {
-      failure();
+      failure(error);
       throw error;
     }
     return origFetch.call(this, input, init);
@@ -124,9 +126,9 @@
     }
     maskBody(state.url, body).then(masked => {
       if (state.active && states.get(this) === state) send.call(this, masked);
-    }).catch(() => {
+    }).catch(error => {
       if (!state.active || states.get(this) !== state) return;
-      failure();
+      failure(error);
       state.active = false;
       abort.call(this);
       this.dispatchEvent(new Event('error'));

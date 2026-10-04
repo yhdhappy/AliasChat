@@ -54,7 +54,7 @@
     const warnings = [];
     const file = async value => {
       if (classify(value.name) === 'opaque') {
-        if (!userConfig.allowOpaqueUploads) throw new Error(`PrivyAI blocked opaque file upload: ${value.name}. PDFs and images are not masked in the browser.`);
+        if (!userConfig.allowOpaqueUploads) throw Object.assign(new Error('PDF/image upload blocked'), { code: 'opaque-blocked' });
         warnings.push(value.name);
       }
       return packFile(await maskFile(unpackFile(value), maskText, found));
@@ -82,7 +82,7 @@
     if (data.token !== token || !['mask-request', 'map-clear'].includes(data.type) || typeof data.id !== 'string') return;
     queue = queue.then(async () => {
       try { window.postMessage({ type: data.type === 'map-clear' ? 'map-cleared' : data.type.replace('-request', '-result'), token, id: data.id, result: await run(data) }, '*'); }
-      catch { window.postMessage({ type: data.type === 'map-clear' ? 'map-cleared' : data.type.replace('-request', '-result'), token, id: data.id, error: 'PrivyAI could not process personal data safely' }, '*'); }
+      catch (error) { window.postMessage({ type: data.type === 'map-clear' ? 'map-cleared' : data.type.replace('-request', '-result'), token, id: data.id, error: 'PrivyAI could not process personal data safely', code: error.code === 'opaque-blocked' ? 'opaque-blocked' : undefined }, '*'); }
     });
   });
   sendConfig();
