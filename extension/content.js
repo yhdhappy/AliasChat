@@ -87,30 +87,13 @@
     const result = await rpc('mask-request', payload);
     for (const name of result.warnings) show(`${name} was uploaded uninspected, PDFs and images are not masked in the browser`, 6000);
     if (result.count) show(`masked ${result.count} value${result.count === 1 ? '' : 's'} before sending`, 4000);
-    else show(`[diag] chat request intercepted, 0 values masked (${payload.format})`, 4000);
     return restore(result.body);
   };
 
   const origFetch = window.fetch;
-  // [diag] Intercept WebSocket to see if retry uses it
-  if (window.WebSocket) {
-    const OrigWebSocket = window.WebSocket;
-    window.WebSocket = function (url, protocols) {
-      try { show(`[diag] ws open ${String(url).slice(0, 80)}`, 4000); } catch {}
-      const ws = new OrigWebSocket(url, protocols);
-      const origSend = ws.send;
-      ws.send = function (data) {
-        try { show(`[diag] ws send ${String(data).slice(0, 80)}`, 4000); } catch {}
-        return origSend.call(this, data);
-      };
-      return ws;
-    };
-    window.WebSocket.prototype = OrigWebSocket.prototype;
-  }
   window.fetch = async function (input, init) {
     try {
       const url = input instanceof Request ? input.url : String(input);
-      try { const u = new URL(url, location.href); show(`[diag] fetch ${u.host}${u.pathname.slice(0, 60)}`, 4000); } catch {}
       if (init && init.body != null) init = { ...init, body: await maskBody(url, init.body) };
       else if (input instanceof Request && input.body && isChatRequest(url)) input = new Request(input, { body: await maskBody(url, await input.clone().arrayBuffer()) });
     } catch (error) {
@@ -161,7 +144,6 @@
   proto.send = function (body) {
     const state = states.get(this);
     if (!state) return send.call(this, body);
-    try { const u = new URL(state.url, location.href); show(`[diag] xhr ${u.host}${u.pathname.slice(0, 60)}`, 4000); } catch {}
     const chat = isChatRequest(state.url);
     if (!chat && !(body instanceof FormData) && !(body instanceof File)) return send.call(this, body);
     if (!state.async) {
