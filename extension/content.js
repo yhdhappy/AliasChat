@@ -9,7 +9,7 @@
   const hasPlaceholder = text => /__PII_[A-Z_]+_(?:[0-9a-f]{12}|[0-9a-f]{6})__/.test(text);
   window.addEventListener('message', e => {
     const data = e.data;
-    if (e.source !== window || !data) return;
+    if (!data || typeof data !== 'object') return;
     if (data.type === 'mask2ai-config') {
       if (token || typeof data.token !== 'string' || !/^[0-9a-f]{64}$/.test(data.token)) return;
       // First config wins. Page scripts can observe the token, preempt this handshake, or forge RPC traffic; postMessage cannot authenticate the isolated bridge.

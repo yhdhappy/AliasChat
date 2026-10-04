@@ -52,7 +52,7 @@
   };
   window.addEventListener('message', e => {
     const data = e.data;
-    if (e.source !== window || !data) return;
+    if (!data || typeof data !== 'object') return;
     if (data.type === 'mask2ai-ready') return sendConfig();
     if (data.token !== token || !['mask-request', 'unmask-request', 'map-clear'].includes(data.type) || typeof data.id !== 'string') return;
     queue = queue.then(async () => {
