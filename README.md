@@ -260,4 +260,4 @@ The project repository is [github.com/yhdhappy/veilAI](https://github.com/yhdhap
 
 ## License
 
-MIT
+MIT. Based on [mask2ai](https://github.com/serkankorkut/mask2ai) (MIT) by Serkan Korkut.
