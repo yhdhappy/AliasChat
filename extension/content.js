@@ -93,18 +93,20 @@
 
   const origFetch = window.fetch;
   // [diag] Intercept WebSocket to see if retry uses it
-  const OrigWebSocket = window.WebSocket;
-  window.WebSocket = function (url, protocols) {
-    try { show(`[diag] ws open ${String(url).slice(0, 80)}`, 4000); } catch {}
-    const ws = new OrigWebSocket(url, protocols);
-    const origSend = ws.send;
-    ws.send = function (data) {
-      try { show(`[diag] ws send ${String(data).slice(0, 80)}`, 4000); } catch {}
-      return origSend.call(this, data);
+  if (window.WebSocket) {
+    const OrigWebSocket = window.WebSocket;
+    window.WebSocket = function (url, protocols) {
+      try { show(`[diag] ws open ${String(url).slice(0, 80)}`, 4000); } catch {}
+      const ws = new OrigWebSocket(url, protocols);
+      const origSend = ws.send;
+      ws.send = function (data) {
+        try { show(`[diag] ws send ${String(data).slice(0, 80)}`, 4000); } catch {}
+        return origSend.call(this, data);
+      };
+      return ws;
     };
-    return ws;
-  };
-  window.WebSocket.prototype = OrigWebSocket.prototype;
+    window.WebSocket.prototype = OrigWebSocket.prototype;
+  }
   window.fetch = async function (input, init) {
     try {
       const url = input instanceof Request ? input.url : String(input);
