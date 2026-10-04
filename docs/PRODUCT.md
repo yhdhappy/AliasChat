@@ -50,7 +50,7 @@ VeilAI 的定位是**防误发**，不是军工级隐私保证。宣传口径只
 |---|---|---|
 | Phase 0 | 验货：确认原项目真实可用、MIT 可商用 | ✅ |
 | Phase 1 | 改名 VeilAI、删土耳其检测、换 Logo | ✅ |
-| Phase 1b | 8 项安全加固（见技术文档） | 🔨 进行中 |
+| Phase 1b | 8 项安全加固（见技术文档） | ✅ |
 | Phase 2 | 商店物料：截图、描述文案 | ⬜ |
 | Phase 3 | Gumroad 上架 + license 验证 | ⬜ |
 | Phase 4 | Chrome / Edge 商店上架 | ⬜ |
