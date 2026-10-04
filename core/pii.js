@@ -72,10 +72,11 @@
     return `(?:${cap}|${upper})`;
   };
   const TYPES = [...new Set(PATTERNS.map(p => p[0]))];
-  const config = { disable: new Set(), extra: [], allow: new Set() };
+  const config = { disable: new Set(), extra: [], allow: new Set(), allowOpaqueUploads: false };
   const configure = cfg => {
     config.disable = new Set((cfg && cfg.disable || []).map(t => String(t).toUpperCase()));
     config.allow = new Set(cfg && cfg.allow || []);
+    config.allowOpaqueUploads = !!(cfg && cfg.allowOpaqueUploads);
     config.extra = (cfg && cfg.extra || []).map(e => [String(e.type || 'CUSTOM').toUpperCase().replace(/[^A-Z]/g, '') || 'CUSTOM', new RegExp(e.pattern, 'g' + (e.flags || '').replace(/g/g, ''))]);
     return config;
   };

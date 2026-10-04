@@ -15,7 +15,7 @@ code { background: #f1efe8; padding: 0 4px; border-radius: 3px; }
 </head>
 <body>
 <h1>VeilAI configuration</h1>
-<p>One JSON object. <code>disable</code> switches detector types off, <code>extra</code> adds your own patterns, <code>allow</code> lists exact values never to mask. Leave it empty to mask everything. Types: EMAIL, IBAN, CARD, CARD_CN, SSN, PHONE, PHONE_CN, ID_CN, ADDRESS, DOB, ID, IP, NAME.</p>
+<p>One JSON object. <code>disable</code> switches detector types off, <code>extra</code> adds your own patterns, <code>allow</code> lists exact values never to mask, <code>allowOpaqueUploads</code> permits PDF/image uploads (blocked by default since they cannot be masked in the browser). Leave it empty to mask everything. Types: EMAIL, IBAN, CARD, CARD_CN, SSN, PHONE, PHONE_CN, ID_CN, ADDRESS, DOB, ID, IP, NAME.</p>
 <textarea id="config" spellcheck="false" placeholder='{
   "disable": ["SSN"],
   "extra": [{ "type": "EMPLOYEE_ID", "pattern": "EMP-\\d{6}" }],

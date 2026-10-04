@@ -28,10 +28,12 @@
   const setMap = map => chrome.storage.session.set({ veilMap: map });
   let salt;
   let queue = Promise.resolve();
+  let userConfig = {};
   const ready = new Promise((resolve, reject) => chrome.storage.sync.get('config', ({ config }) => {
     try {
       if (chrome.runtime.lastError) throw new Error(chrome.runtime.lastError.message);
-      configure(config || {});
+      userConfig = config || {};
+      configure(userConfig);
       resolve();
     } catch (error) { reject(error); }
   }));
@@ -51,7 +53,10 @@
     const maskText = (text, values) => mask(text, values, salt);
     const warnings = [];
     const file = async value => {
-      if (classify(value.name) === 'opaque') warnings.push(value.name);
+      if (classify(value.name) === 'opaque') {
+        if (!userConfig.allowOpaqueUploads) throw new Error(`VeilAI blocked opaque file upload: ${value.name}. PDFs and images are not masked in the browser.`);
+        warnings.push(value.name);
+      }
       return packFile(await maskFile(unpackFile(value), maskText, found));
     };
     let body;
