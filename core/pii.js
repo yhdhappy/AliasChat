@@ -44,7 +44,7 @@
 
   const fullNameLike = s => /^(?:\p{Lu}\p{Ll}+|\p{Lu}{2,})(?:[ \t]+(?:\p{Lu}\p{Ll}+|\p{Lu}{2,})){1,3}$/u.test(s);
   const personLike = s => /^(?:\p{Lu}\p{Ll}+|\p{Lu}{2,})(?:[ \t]+(?:\p{Lu}\p{Ll}+|\p{Lu}{2,})){0,3}$/u.test(s);
-  const addressLike = s => /\d/.test(s) && /\p{L}{3}/u.test(s) && !/^(?:0x|\d+\.\d+\.\d+\.\d+)/i.test(s);
+  const addressLike = s => !/__PII_/.test(s) && /\d/.test(s) && /\p{L}{3}/u.test(s) && !/^(?:0x|\d+\.\d+\.\d+\.\d+)/i.test(s);
 
   const PATTERNS = [
     ['EMAIL', /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g],
@@ -113,7 +113,14 @@
     if (!config.disable.has('NAME')) for (const re of repeatedNames(found)) text = apply(text, 'NAME', re, null, found, salt);
     return text;
   };
-  const unmask = (text, map) => text.replace(PLACEHOLDER, p => map[p] ?? p);
+  const unmask = (text, map) => {
+    for (let i = 0; i < 10; i++) {
+      const next = text.replace(PLACEHOLDER, p => map[p] ?? p);
+      if (next === text) return text;
+      text = next;
+    }
+    return text;
+  };
   const deepMap = (v, fn) => typeof v === 'string' ? fn(v)
     : Array.isArray(v) ? v.map(x => deepMap(x, fn))
     : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, deepMap(x, fn)]))
