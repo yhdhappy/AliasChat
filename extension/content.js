@@ -87,6 +87,7 @@
     const result = await rpc('mask-request', payload);
     for (const name of result.warnings) show(`${name} was uploaded uninspected, PDFs and images are not masked in the browser`, 6000);
     if (result.count) show(`masked ${result.count} value${result.count === 1 ? '' : 's'} before sending`, 4000);
+    else show(`[diag] chat request intercepted, 0 values masked (${payload.format})`, 4000);
     return restore(result.body);
   };
 
