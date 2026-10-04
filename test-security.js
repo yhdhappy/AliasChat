@@ -8,6 +8,15 @@ const pii = require('./core/pii.js');
 const { rewrite } = require('./extension/rewrite.js');
 const { validatePattern, validateExtras } = require('./extension/regex-validation.js');
 
+const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+if (manifest.background) {
+  const files = [...new Set(manifest.content_scripts.flatMap(script => script.js))];
+  const background = fs.readFileSync(manifest.background.service_worker, 'utf8');
+  if ([background, ...files.map(file => fs.readFileSync(file, 'utf8'))].some(source => source.includes('chrome.storage.session'))) {
+    assert(background.includes('chrome.storage.session.setAccessLevel'), 'Background must set the session storage access level');
+  }
+}
+
 const repeated = 'My name is Ali Veli. Ali Veli, ali veli, ALI VELI. XAli Veli, Ali Velix, Ali Veli_1.';
 const names = {};
 const maskedNames = pii.mask(repeated, names);
