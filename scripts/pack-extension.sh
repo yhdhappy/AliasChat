@@ -6,6 +6,6 @@ files=$(node -p "const m=require('./manifest.json');const o=m.options_ui?m.optio
 mkdir -p dist
 out="dist/privyAI-extension-$version.zip"
 rm -f "$out"
-zip -q "$out" manifest.json $files
+zip -q "$out" manifest.json $files extension/welcome.html extension/welcome.js
 unzip -l "$out"
 echo "$out"
