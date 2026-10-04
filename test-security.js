@@ -109,7 +109,8 @@ const extension = (config = {}) => {
     addEventListener() {},
     createTreeWalker: root => { let i = 0; return { nextNode: () => root.children[i++] }; }
   }, MutationObserver: class { constructor(fn) { observer = fn; } observe() {} } });
-  const bridge = vm.createContext({ ...shared, window: bridgeWindow, chrome: { runtime: {}, storage: { sync: { get: (key, fn) => queueMicrotask(() => fn({ config })) } } } });
+  const sessionStore = {};
+  const bridge = vm.createContext({ ...shared, window: bridgeWindow, chrome: { runtime: {}, storage: { sync: { get: (key, fn) => queueMicrotask(() => fn({ config })) }, session: { get: async key => ({ veilMap: sessionStore.veilMap }), set: async obj => { Object.assign(sessionStore, obj); }, remove: async key => { delete sessionStore.veilMap; }, clear: async () => { for (const k of Object.keys(sessionStore)) delete sessionStore[k]; } } } } });
   const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
   for (const file of manifest.content_scripts[0].js) {
     vm.runInContext(fs.readFileSync(file, 'utf8'), page, { filename: file });

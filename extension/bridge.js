@@ -24,7 +24,8 @@
   };
   const rewrite = (bodyText, maskFn, found) => /^\s*[[{]/.test(bodyText) ? rewriteJson(bodyText, maskFn, found) : rewriteForm(bodyText, maskFn, found);
   const token = [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
-  const map = new Map();
+  const getMap = async () => (await chrome.storage.session.get('veilMap')).veilMap || {};
+  const setMap = map => chrome.storage.session.set({ veilMap: map });
   let salt;
   let queue = Promise.resolve();
   const ready = new Promise((resolve, reject) => chrome.storage.sync.get('config', ({ config }) => {
@@ -41,11 +42,11 @@
   const run = async data => {
     await ready;
     if (data.type === 'map-clear') {
-      map.clear();
+      await chrome.storage.session.remove('veilMap');
       return {};
     }
     if (data.type === 'unmask-request') {
-      const values = Object.fromEntries(map);
+      const values = await getMap();
       return { body: deepMap(data.body, text => unmask(text, values)) };
     }
     if (typeof data.salt !== 'string' || !/^[0-9a-f]{64}$/.test(data.salt)) throw new Error('Invalid masking session');
@@ -68,7 +69,9 @@
         body.push({ key: entry.key, file: entry.file, value });
       }
     } else throw new Error('Unsupported masking format');
-    for (const [placeholder, value] of Object.entries(found)) map.set(placeholder, value);
+    const map = await getMap();
+    for (const [placeholder, value] of Object.entries(found)) map[placeholder] = value;
+    await setMap(map);
     return { body, count: Object.keys(found).length, warnings };
   };
   window.addEventListener('message', e => {
