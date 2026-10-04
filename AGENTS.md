@@ -1,4 +1,4 @@
-# Working on VeilAI
+# Working on PrivyAI
 
 Read `docs/HANDOFF.md` first; it has the architecture, the verification commands and the open work.
 

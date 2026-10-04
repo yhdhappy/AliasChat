@@ -1,5 +1,5 @@
 {
-  "name": "veil-ai",
+  "name": "privy-ai",
   "description": "Masks personal data (emails, phones, cards, IBANs, national IDs) before it leaves Claude Code, and restores it in tool calls and on screen.",
   "version": "0.6.0",
   "author": {

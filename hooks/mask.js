@@ -7,7 +7,7 @@ const { mask, unmask, hasPlaceholder, deepMap, configure } = require('../core/pi
 const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 
-const dir = process.env.CLAUDE_PLUGIN_DATA || path.join(os.homedir(), '.claude', 'veilAI');
+const dir = process.env.CLAUDE_PLUGIN_DATA || path.join(os.homedir(), '.claude', 'privyAI');
 const file = id => path.join(dir, `${id}.jsonl`);
 const save = (id, found) => {
   const lines = Object.entries(found).map(([p, v]) => JSON.stringify({ p, v }) + '\n').join('');
@@ -55,15 +55,15 @@ const stem = file => `${path.basename(file)}-${crypto.createHash('sha1').update(
 
 const redirectPdf = (id, input, found) => {
   const file = input.tool_input.file_path;
-  if (!visionBinary()) return { systemMessage: `VeilAI: ${path.basename(file)} read uninspected, converting PDFs needs macOS with the Swift toolchain` };
+  if (!visionBinary()) return { systemMessage: `PrivyAI: ${path.basename(file)} read uninspected, converting PDFs needs macOS with the Swift toolchain` };
   const text = vision('pdf-text', file).replace(/\s+$/, '');
-  const content = text.trim() ? mask(text, found) : 'VeilAI: this PDF has no extractable text, so it was not sent. Ask for it as an image instead.';
+  const content = text.trim() ? mask(text, found) : 'PrivyAI: this PDF has no extractable text, so it was not sent. Ask for it as an image instead.';
   const out = path.join(readsDir(id), `${stem(file)}.txt`);
   fs.mkdirSync(readsDir(id), { recursive: true });
   fs.writeFileSync(out, content, { mode: 0o600 });
   const n = Object.keys(found).length;
   return {
-    systemMessage: text.trim() ? `VeilAI: converted ${path.basename(file)} to text and masked ${n} value${n === 1 ? '' : 's'}` : `VeilAI: ${path.basename(file)} has no extractable text, nothing was sent`,
+    systemMessage: text.trim() ? `PrivyAI: converted ${path.basename(file)} to text and masked ${n} value${n === 1 ? '' : 's'}` : `PrivyAI: ${path.basename(file)} has no extractable text, nothing was sent`,
     hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: { ...input.tool_input, file_path: out } }
   };
 };
@@ -89,7 +89,7 @@ const imageBoxes = (file, found) => {
 
 const redirectImage = (id, input, found) => {
   const file = input.tool_input.file_path;
-  if (!visionBinary()) return { systemMessage: `VeilAI: ${path.basename(file)} read uninspected, redacting images needs macOS with the Swift toolchain` };
+  if (!visionBinary()) return { systemMessage: `PrivyAI: ${path.basename(file)} read uninspected, redacting images needs macOS with the Swift toolchain` };
   const boxes = imageBoxes(file, found);
   if (!boxes.length) return null;
   const out = path.join(readsDir(id), `${stem(file)}${/\.jpe?g$/i.test(file) ? '.jpg' : '.png'}`);
@@ -98,7 +98,7 @@ const redirectImage = (id, input, found) => {
   fs.chmodSync(out, 0o600);
   const n = Object.keys(found).length;
   return {
-    systemMessage: `VeilAI: redacted ${n} value${n === 1 ? '' : 's'} in ${path.basename(file)}`,
+    systemMessage: `PrivyAI: redacted ${n} value${n === 1 ? '' : 's'} in ${path.basename(file)}`,
     hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: { ...input.tool_input, file_path: out } }
   };
 };
@@ -146,7 +146,7 @@ const main = () => {
   const out = o => process.stdout.write(JSON.stringify(o));
   switch (input.hook_event_name) {
     case 'SessionStart':
-      out({ systemMessage: 'VeilAI active: personal data in prompts and tool output is masked before it reaches the model' + (cfg ? (cfg.error ? `. Config ${cfg.file} ignored: ${cfg.error}` : `. Config: ${cfg.file}`) : ''), hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'Tokens shaped like __PII_EMAIL_a1b2c3d4e5f6__ are personal data masked by the VeilAI plugin. Treat them as opaque literals: copy them verbatim into tool inputs, never guess, expand or alter them.' } });
+      out({ systemMessage: 'PrivyAI active: personal data in prompts and tool output is masked before it reaches the model' + (cfg ? (cfg.error ? `. Config ${cfg.file} ignored: ${cfg.error}` : `. Config: ${cfg.file}`) : ''), hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'Tokens shaped like __PII_EMAIL_a1b2c3d4e5f6__ are personal data masked by the PrivyAI plugin. Treat them as opaque literals: copy them verbatim into tool inputs, never guess, expand or alter them.' } });
       break;
     case 'UserPromptSubmit': {
       const found = {};
@@ -159,7 +159,7 @@ const main = () => {
         out({
           decision: 'block',
           suppressOriginalPrompt: true,
-          reason: `VeilAI: personal data found in a pasted image, nothing was sent.\n${list}\n\nAttach the redacted copy instead (drag it into the chat) and resend${masked === input.prompt ? '.' : ' with this masked text:\n\n' + masked}`
+          reason: `PrivyAI: personal data found in a pasted image, nothing was sent.\n${list}\n\nAttach the redacted copy instead (drag it into the chat) and resend${masked === input.prompt ? '.' : ' with this masked text:\n\n' + masked}`
         });
         break;
       }
@@ -167,7 +167,7 @@ const main = () => {
       out({
         decision: 'block',
         suppressOriginalPrompt: true,
-        reason: `VeilAI: personal data found in your prompt, nothing was sent. ${copied ? 'A masked copy is in your clipboard: press Edit prompt, select all, paste, send. In the terminal just paste and send' : 'Resend this masked version'}:\n\n${masked}`
+        reason: `PrivyAI: personal data found in your prompt, nothing was sent. ${copied ? 'A masked copy is in your clipboard: press Edit prompt, select all, paste, send. In the terminal just paste and send' : 'Resend this masked version'}:\n\n${masked}`
       });
       break;
     }
@@ -179,7 +179,7 @@ const main = () => {
       if (!Object.keys(found).length) break;
       save(id, found);
       const n = Object.keys(found).length;
-      out({ systemMessage: `VeilAI: masked ${n} value${n === 1 ? '' : 's'} in ${input.tool_name} output`, hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } });
+      out({ systemMessage: `PrivyAI: masked ${n} value${n === 1 ? '' : 's'} in ${input.tool_name} output`, hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } });
       break;
     }
     case 'PreToolUse': {

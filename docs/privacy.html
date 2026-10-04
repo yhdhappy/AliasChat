@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VeilAI Privacy Policy</title>
+<title>PrivyAI Privacy Policy</title>
 <style>
 body { font-family: system-ui, -apple-system, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #1a1a1a; }
 h1 { font-size: 28px; margin-bottom: 8px; }
@@ -13,33 +13,33 @@ p, li { font-size: 15px; }
 </style>
 </head>
 <body>
-<h1>VeilAI Privacy Policy</h1>
+<h1>PrivyAI Privacy Policy</h1>
 <p class="updated">Last updated: October 4, 2026</p>
 
-<p>VeilAI is a browser extension that masks personal data in messages before they are sent to claude.ai or ChatGPT, and restores the real values on your screen. This policy explains what data VeilAI handles and how.</p>
+<p>PrivyAI is a browser extension that masks personal data in messages before they are sent to claude.ai or ChatGPT, and restores the real values on your screen. This policy explains what data PrivyAI handles and how.</p>
 
 <h2>Data Collection</h2>
-<p><strong>VeilAI collects no data.</strong> There is no server, no account, no analytics, and no telemetry. The extension makes no network requests of its own.</p>
+<p><strong>PrivyAI collects no data.</strong> There is no server, no account, no analytics, and no telemetry. The extension makes no network requests of its own.</p>
 
 <h2>How Masking Works</h2>
-<p>When you send a message on claude.ai or chatgpt.com, VeilAI scans the message text in your browser tab for patterns that look like personal data (email addresses, phone numbers, payment card numbers, ID numbers, names, addresses, and similar). Each detected match is replaced with a placeholder before the message leaves your browser.</p>
+<p>When you send a message on claude.ai or chatgpt.com, PrivyAI scans the message text in your browser tab for patterns that look like personal data (email addresses, phone numbers, payment card numbers, ID numbers, names, addresses, and similar). Each detected match is replaced with a placeholder before the message leaves your browser.</p>
 <p><strong>Limitations:</strong> Detection is pattern-based and cannot guarantee all personal data is caught. A bare name in free text with no title, label, or matching email nearby may not be detected. PDF and image uploads are blocked by default because their contents cannot be inspected in the browser.</p>
 <p>The mapping between placeholders and real values is kept in the browser's session storage, which is not accessible to web pages. It is never sent anywhere and is discarded when the browser closes.</p>
 
 <h2>Optional Configuration</h2>
-<p>VeilAI has an options page where you may provide custom detection rules in JSON format. If you save configuration, it is stored using the browser's <code>chrome.storage.sync</code> API, which syncs through your own browser account (e.g., your Google account) according to your browser's sync settings. VeilAI's developers never see this data.</p>
+<p>PrivyAI has an options page where you may provide custom detection rules in JSON format. If you save configuration, it is stored using the browser's <code>chrome.storage.sync</code> API, which syncs through your own browser account (e.g., your Google account) according to your browser's sync settings. PrivyAI's developers never see this data.</p>
 
 <h2>Permissions</h2>
-<p>VeilAI requests a single permission, <code>storage</code>, solely to save the optional configuration described above. It uses content scripts on <code>https://claude.ai/*</code>, <code>https://chatgpt.com/*</code>, and <code>https://chat.openai.com/*</code> only — the minimum needed to rewrite chat requests before sending and to restore placeholders in the rendered page.</p>
+<p>PrivyAI requests a single permission, <code>storage</code>, solely to save the optional configuration described above. It uses content scripts on <code>https://claude.ai/*</code>, <code>https://chatgpt.com/*</code>, and <code>https://chat.openai.com/*</code> only — the minimum needed to rewrite chat requests before sending and to restore placeholders in the rendered page.</p>
 
 <h2>Third-Party Services</h2>
-<p>VeilAI does not embed any third-party SDKs, trackers, or advertising. When you use claude.ai or ChatGPT, those services' own privacy policies apply to the (masked) data they receive.</p>
+<p>PrivyAI does not embed any third-party SDKs, trackers, or advertising. When you use claude.ai or ChatGPT, those services' own privacy policies apply to the (masked) data they receive.</p>
 
 <h2>Open Source</h2>
-<p>VeilAI is open source under the MIT License. You can inspect exactly what the extension does at <a href="https://github.com/yhdhappy/veilAI">github.com/yhdhappy/veilAI</a>.</p>
+<p>PrivyAI is open source under the MIT License. You can inspect exactly what the extension does at <a href="https://github.com/yhdhappy/privyAI">github.com/yhdhappy/privyAI</a>.</p>
 
 <h2>Contact</h2>
-<p>For privacy questions, open an issue at <a href="https://github.com/yhdhappy/veilAI/issues">github.com/yhdhappy/veilAI/issues</a>.</p>
+<p>For privacy questions, open an issue at <a href="https://github.com/yhdhappy/privyAI/issues">github.com/yhdhappy/privyAI/issues</a>.</p>
 
 <h2>Changes</h2>
 <p>If this policy changes, the updated date above will be revised. Continued use of the extension after a change constitutes acceptance of the new policy.</p>

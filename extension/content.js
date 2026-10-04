@@ -29,7 +29,7 @@
     const id = salt + ':' + ++sequence;
     const timer = setTimeout(() => {
       pending.delete(id);
-      reject(new Error('VeilAI bridge did not respond'));
+      reject(new Error('PrivyAI bridge did not respond'));
     }, 10000);
     pending.set(id, { resolve, reject, timer, type: type === 'map-clear' ? 'map-cleared' : type.replace('-request', '-result') });
     ready.then(() => {
@@ -42,7 +42,7 @@
     const el = document.createElement('div');
     el.setAttribute('data-mask2ai', '');
     el.style.cssText = style + 'right:16px;bottom:16px;';
-    el.textContent = '🛡 VeilAI: ' + text;
+    el.textContent = '🛡 PrivyAI: ' + text;
     (document.body || document.documentElement).appendChild(el);
     if (ms) setTimeout(() => el.remove(), ms);
   };
@@ -120,7 +120,7 @@
     if (!state.async) {
       if (!chat) return send.call(this, body);
       failure();
-      throw new Error('VeilAI requires asynchronous XMLHttpRequest for masking');
+      throw new Error('PrivyAI requires asynchronous XMLHttpRequest for masking');
     }
     maskBody(state.url, body).then(masked => {
       if (state.active && states.get(this) === state) send.call(this, masked);

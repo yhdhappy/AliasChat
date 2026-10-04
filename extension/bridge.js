@@ -24,8 +24,8 @@
   };
   const rewrite = (bodyText, maskFn, found) => /^\s*[[{]/.test(bodyText) ? rewriteJson(bodyText, maskFn, found) : rewriteForm(bodyText, maskFn, found);
   const token = [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
-  const getMap = async () => (await chrome.storage.session.get('veilMap')).veilMap || {};
-  const setMap = map => chrome.storage.session.set({ veilMap: map });
+  const getMap = async () => (await chrome.storage.session.get('privyMap')).privyMap || {};
+  const setMap = map => chrome.storage.session.set({ privyMap: map });
   let salt;
   let queue = Promise.resolve();
   let userConfig = {};
@@ -44,7 +44,7 @@
   const run = async data => {
     await ready;
     if (data.type === 'map-clear') {
-      await chrome.storage.session.remove('veilMap');
+      await chrome.storage.session.remove('privyMap');
       return {};
     }
     if (typeof data.salt !== 'string' || !/^[0-9a-f]{64}$/.test(data.salt)) throw new Error('Invalid masking session');
@@ -54,7 +54,7 @@
     const warnings = [];
     const file = async value => {
       if (classify(value.name) === 'opaque') {
-        if (!userConfig.allowOpaqueUploads) throw new Error(`VeilAI blocked opaque file upload: ${value.name}. PDFs and images are not masked in the browser.`);
+        if (!userConfig.allowOpaqueUploads) throw new Error(`PrivyAI blocked opaque file upload: ${value.name}. PDFs and images are not masked in the browser.`);
         warnings.push(value.name);
       }
       return packFile(await maskFile(unpackFile(value), maskText, found));
@@ -82,7 +82,7 @@
     if (data.token !== token || !['mask-request', 'map-clear'].includes(data.type) || typeof data.id !== 'string') return;
     queue = queue.then(async () => {
       try { window.postMessage({ type: data.type === 'map-clear' ? 'map-cleared' : data.type.replace('-request', '-result'), token, id: data.id, result: await run(data) }, '*'); }
-      catch { window.postMessage({ type: data.type === 'map-clear' ? 'map-cleared' : data.type.replace('-request', '-result'), token, id: data.id, error: 'VeilAI could not process personal data safely' }, '*'); }
+      catch { window.postMessage({ type: data.type === 'map-clear' ? 'map-cleared' : data.type.replace('-request', '-result'), token, id: data.id, error: 'PrivyAI could not process personal data safely' }, '*'); }
     });
   });
   sendConfig();

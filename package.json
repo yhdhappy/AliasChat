@@ -1,11 +1,11 @@
 {
-  "name": "veil-ai",
+  "name": "privy-ai",
   "version": "0.6.0",
   "description": "Masks personal data before it reaches an AI assistant. Claude Code plugin and Chrome extension for claude.ai and ChatGPT.",
   "private": true,
   "license": "MIT",
   "author": "yhdhappy",
-  "repository": "github:yhdhappy/veilAI",
+  "repository": "github:yhdhappy/privyAI",
   "engines": {
     "node": ">=18"
   },

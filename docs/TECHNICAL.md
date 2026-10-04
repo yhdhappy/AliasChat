@@ -1,6 +1,6 @@
-# VeilAI 技术文档
+# PrivyAI 技术文档
 
-> 面向：写代码的 Agent。读完这份应该能直接上手改代码。基准：serkankorkut/mask2ai v0.6.0（MIT），VeilAI 是其英文市场 fork。
+> 面向：写代码的 Agent。读完这份应该能直接上手改代码。基准：serkankorkut/mask2ai v0.6.0（MIT），PrivyAI 是其英文市场 fork。
 
 ## 技术栈
 
@@ -26,7 +26,7 @@
 2. 识别发往 chatgpt.com / claude.ai 的聊天请求（URL 含 `completion` / `conversation` / `chat_conversations`）。
 3. 把请求体（JSON / 表单 / 字节流，支持 gzip）递给 `bridge.js`。
 4. `bridge.js` 调 `core/pii.js` 的 `mask()`：按类型（EMAIL、PHONE、CARD…）用正则找敏感信息，换成占位符如 `__PII_EMAIL_a1b2c3d4e5f6__`，真值记在对照表里。
-5. 改写后的请求发出去。发之前右下角弹 toast："VeilAI: 遮蔽了 N 处"。
+5. 改写后的请求发出去。发之前右下角弹 toast："PrivyAI: 遮蔽了 N 处"。
 
 **收回来（还原）：**
 1. `MutationObserver` 盯着页面文本节点。
