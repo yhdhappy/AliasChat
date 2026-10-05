@@ -5,7 +5,7 @@
   "private": true,
   "license": "MIT",
   "author": "yhdhappy",
-  "repository": "github:yhdhappy/privyAI",
+  "repository": "github:yhdhappy/AliasChat",
   "engines": {
     "node": ">=18"
   },
