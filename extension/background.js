@@ -11,7 +11,7 @@
 let maskingKey;
 const getMaskingKey = () => maskingKey ||= (async () => {
   let { privyKey } = await chrome.storage.session.get('privyKey');
-  if (!privyKey) {
+  if (!Array.isArray(privyKey) || privyKey.length !== 32) {
     privyKey = [...crypto.getRandomValues(new Uint8Array(32))];
     await chrome.storage.session.set({ privyKey });
   }

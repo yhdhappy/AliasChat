@@ -250,6 +250,9 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   const retryWorker = extension({}, {}, false, true);
   await assert.rejects(retryWorker.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact retry@example.com' }) }));
   await retryWorker.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact retry@example.com' }) });
+  const invalidKey = extension({}, { privyKey: [1, 2, 3] });
+  await invalidKey.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact invalid@example.com' }) });
+  assert.strictEqual(invalidKey.sessionStore.privyKey.length, 32, 'Invalid stored masking keys must be replaced');
   const ext = extension();
   const body = JSON.stringify({ messages: [{ content: { parts: ['My name is Ali Veli. Ali Veli: jane.doe@example.com'] } }] });
   await ext.page.fetch(url, { method: 'POST', body });
