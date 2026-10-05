@@ -163,6 +163,12 @@ assert(blocked.suppressOriginalPrompt);
 assert(!blocked.reason.includes('ali@example.com'));
 assert(/__PII_EMAIL_[0-9a-f]{12}__/.test(blocked.reason));
 
+assert.strictEqual(run({ hook_event_name: 'UserPromptSubmit', prompt: 'email ali@example.com about it' }).reason, blocked.reason);
+assert.strictEqual(fs.statSync(path.join(data, 'placeholder.key')).mode & 0o777, 0o600);
+const key = fs.readFileSync(path.join(data, 'placeholder.key'));
+assert.strictEqual(key.length, 32);
+assert(blocked.reason.includes(require('crypto').createHmac('sha256', key).update('ali@example.com').digest('hex').slice(0, 12)));
+
 const post = run({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_response: { stdout: 'owner: veli@example.com\n', stderr: '', interrupted: false, isImage: false } });
 const ph = post.hookSpecificOutput.updatedToolOutput.stdout.trim().split(' ')[1];
 assert(/^__PII_EMAIL_[0-9a-f]{12}__$/.test(ph), ph);

@@ -2,7 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 const { Worker } = require('worker_threads');
-const { webcrypto } = require('crypto');
+const { webcrypto, createHmac, randomBytes } = require('crypto');
 const { File } = require('buffer');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
@@ -81,15 +81,22 @@ for (const email of ['a+b.c_d%z@example.co.uk', 'A@sub-domain.example.COM']) {
 for (const text of ['a@example..com', 'a@example.c', 'a@.example.com']) assert.strictEqual(pii.mask(text, {}), text);
 assert(pii.mask('a@example.com123', {}).endsWith('123'));
 
+pii.configure({ allow: ['a@example.com'] });
+assert.strictEqual(pii.mask('a@example.com123', {}), 'a@example.com123');
+pii.configure({});
+
 const salted = {};
-const first = pii.mask('jane.doe@example.com', salted, 'first-session');
+const firstKey = randomBytes(32);
+const firstTokenizer = pii.createTokenizer(firstKey);
+const first = pii.mask('jane.doe@example.com', salted, firstTokenizer);
+assert.strictEqual(first, `__PII_EMAIL_${createHmac('sha256', firstKey).update('jane.doe@example.com').digest('hex').slice(0, 12)}__`);
 assert(/^__PII_EMAIL_[0-9a-f]{12}__$/.test(first));
-assert.strictEqual(first, pii.mask('jane.doe@example.com', {}, 'first-session'));
-assert.notStrictEqual(first, pii.mask('jane.doe@example.com', {}, 'second-session'));
+assert.strictEqual(first, pii.mask('jane.doe@example.com', {}, firstTokenizer));
+assert.notStrictEqual(first, pii.mask('jane.doe@example.com', {}, pii.createTokenizer(randomBytes(32))));
 assert.strictEqual(pii.unmask(first, salted), 'jane.doe@example.com');
 assert.strictEqual(pii.unmask('__PII_EMAIL_abcdef__', { __PII_EMAIL_abcdef__: 'legacy@example.com' }), 'legacy@example.com');
 const collisionMap = {};
-for (let i = 0; i < 1000; i++) pii.mask(`person${i}@example.com`, collisionMap, 'collision-test');
+for (let i = 0; i < 1000; i++) pii.mask(`person${i}@example.com`, collisionMap, firstTokenizer);
 assert.strictEqual(Object.keys(collisionMap).length, 1000);
 
 assert.throws(() => rewrite('state=' + encodeURIComponent('{\"prompt\":\"jane.doe@example.com\"}'), () => { throw new Error('mask failed'); }, {}), /mask failed/);
@@ -111,7 +118,7 @@ const until = async predicate => {
   }
   throw new Error('Expected asynchronous operation did not complete');
 };
-const extension = (config = {}) => {
+const extension = (config = {}, sessionStore = {}, failDigests = false) => {
   const listeners = [];
   const messages = [];
   const requests = [];
@@ -150,18 +157,24 @@ const extension = (config = {}) => {
     addEventListener() {},
     createTreeWalker: root => { let i = 0; return { nextNode: () => root.children[i++] }; }
   }, MutationObserver: class { constructor(fn) { observer = fn; } observe() {} } });
-  const sessionStore = {};
+  let digestListener;
+  const session = { get: async key => ({ [key]: sessionStore[key] }), set: async obj => { Object.assign(sessionStore, structuredClone(obj)); }, setAccessLevel: async () => {}, clear: async () => { for (const key of Object.keys(sessionStore)) delete sessionStore[key]; } };
+  const restartBackground = () => vm.runInNewContext(fs.readFileSync('extension/background.js', 'utf8'), {
+    crypto: webcrypto, Uint8Array, TextEncoder,
+    chrome: { storage: { session }, runtime: { id: 'privy-test', onStartup: { addListener() {} }, onInstalled: { addListener() {} }, onMessage: { addListener: fn => { digestListener = fn; } } } }
+  });
+  restartBackground();
   const bridge = vm.createContext({ ...shared, window: bridgeWindow, document: {
     documentElement: {},
     createTreeWalker: root => { let i = 0; return { nextNode: () => root.children[i++] }; }
-  }, MutationObserver: class { constructor(fn) { bridgeObserver = fn; } observe() {} }, chrome: { runtime: {}, storage: { sync: { get: (key, fn) => queueMicrotask(() => fn({ config })) }, session: { get: async key => ({ privyMap: sessionStore.privyMap }), set: async obj => { Object.assign(sessionStore, obj); }, remove: async key => { delete sessionStore.privyMap; }, clear: async () => { for (const k of Object.keys(sessionStore)) delete sessionStore[k]; } } } } });
+  }, MutationObserver: class { constructor(fn) { bridgeObserver = fn; } observe() {} }, chrome: { runtime: { sendMessage: message => failDigests ? Promise.reject(new Error('Worker unavailable')) : new Promise(resolve => digestListener(structuredClone(message), { id: 'privy-test' }, resolve)) }, storage: { sync: { get: (key, fn) => queueMicrotask(() => fn({ config })) }, session } } });
   const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
   for (const file of manifest.content_scripts[0].js) {
     vm.runInContext(fs.readFileSync(file, 'utf8'), page, { filename: file });
     if (page.piiRewrite) pageWindow.piiRewrite = page.piiRewrite;
   }
   for (const file of manifest.content_scripts[1].js) vm.runInContext(fs.readFileSync(file, 'utf8'), bridge, { filename: file });
-  return { page: pageWindow, requests, messages, toasts, deliver, mutate: muts => bridgeObserver(muts) };
+  return { page: pageWindow, requests, messages, toasts, deliver, sessionStore, restartBackground, mutate: muts => bridgeObserver(muts) };
 };
 
 (async () => {
@@ -212,6 +225,32 @@ const extension = (config = {}) => {
   ext.deliver({ type: 'mask2ai-config', token: 'f'.repeat(64), config: { disable: ['EMAIL', 'NAME'] } });
   await ext.page.fetch(url, { method: 'POST', body });
   assert.strictEqual(ext.requests[1].init.body, wire);
+  assert.strictEqual(ext.sessionStore.privyKey.length, 32);
+  const expectedEmail = createHmac('sha256', Buffer.from(ext.sessionStore.privyKey)).update('jane.doe@example.com').digest('hex').slice(0, 12);
+  assert(wire.includes(`__PII_EMAIL_${expectedEmail}__`));
+  assert(!JSON.stringify(ext.messages).includes(JSON.stringify(ext.sessionStore.privyKey)));
+  assert(!ext.messages.some(message => 'salt' in message || 'key' in message || 'privyKey' in message));
+  ext.restartBackground();
+  await ext.page.fetch(url, { method: 'POST', body });
+  assert.strictEqual(ext.requests.at(-1).init.body, wire);
+  const refreshed = extension({}, ext.sessionStore);
+  await refreshed.page.fetch(url, { method: 'POST', body });
+  assert.strictEqual(refreshed.requests[0].init.body, wire);
+  const freshSession = extension();
+  await freshSession.page.fetch(url, { method: 'POST', body });
+  assert.notStrictEqual(freshSession.requests[0].init.body, wire);
+  ext.sessionStore.privyMap.__PII_EMAIL_abcdef__ = 'legacy@example.com';
+  ext.sessionStore.privyMap.__PII_EMAIL_abcdef123456__ = 'old@example.com';
+  const legacyNode = { nodeType: 3, data: '__PII_EMAIL_abcdef__ __PII_EMAIL_abcdef123456__', parentElement: { closest: () => null } };
+  await refreshed.mutate([{ type: 'characterData', target: legacyNode, addedNodes: [] }]);
+  assert.strictEqual(legacyNode.data, 'legacy@example.com old@example.com');
+  const beforeUnmaskProbe = ext.messages.length;
+  ext.deliver({ type: 'unmask-request', token, id: 'page-probe', body: placeholders[2] });
+  await delay();
+  assert.strictEqual(ext.messages.length, beforeUnmaskProbe);
+  const unavailableWorker = extension({}, {}, true);
+  await assert.rejects(unavailableWorker.page.fetch(url, { method: 'POST', body }));
+  assert.strictEqual(unavailableWorker.requests.length, 0);
   const node = { nodeType: 3, data: placeholders.join(' '), parentElement: { closest: () => null } };
   await ext.mutate([{ type: 'characterData', target: node, addedNodes: [] }]);
   assert.strictEqual(node.data, 'Ali Veli Ali Veli jane.doe@example.com');

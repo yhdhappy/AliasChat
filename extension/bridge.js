@@ -26,7 +26,6 @@
   const token = [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
   const getMap = async () => (await chrome.storage.session.get('privyMap')).privyMap || {};
   const setMap = map => chrome.storage.session.set({ privyMap: map });
-  let salt;
   let queue = Promise.resolve();
   let userConfig = {};
   const ready = new Promise((resolve, reject) => chrome.storage.sync.get('config', ({ config }) => {
@@ -43,10 +42,13 @@
   const packFile = async file => ({ bytes: await file.arrayBuffer(), name: file.name, type: file.type, lastModified: file.lastModified });
   const run = async data => {
     await ready;
-    if (typeof data.salt !== 'string' || !/^[0-9a-f]{64}$/.test(data.salt)) throw new Error('Invalid masking session');
-    salt ??= data.salt;
-    const found = Object.create(null);
-    const maskText = (text, values) => mask(text, values, salt);
+    let found = Object.create(null);
+    const candidates = new Map();
+    let tokenize = value => {
+      if (!candidates.has(value)) candidates.set(value, [...crypto.getRandomValues(new Uint8Array(6))].map(n => n.toString(16).padStart(2, '0')).join(''));
+      return candidates.get(value);
+    };
+    const maskText = (text, values) => mask(text, values, tokenize);
     const warnings = [];
     const file = async value => {
       if (classify(value.name) === 'opaque') {
@@ -55,17 +57,34 @@
       }
       return packFile(await maskFile(unpackFile(value), maskText, found));
     };
-    let body;
-    if (data.format === 'chat') body = rewrite(data.body, maskText, found);
-    else if (data.format === 'file') body = await file(data.body);
-    else if (data.format === 'form') {
-      body = [];
-      for (const entry of data.body) {
-        let value = entry.file ? await file(entry.value) : entry.value;
-        if (!entry.file && data.chat) value = new URLSearchParams(rewrite(new URLSearchParams([[entry.key, value]]).toString(), maskText, found)).get(entry.key);
-        body.push({ key: entry.key, file: entry.file, value });
-      }
-    } else throw new Error('Unsupported masking format');
+    const processBody = async () => {
+      let body;
+      if (data.format === 'chat') body = rewrite(data.body, maskText, found);
+      else if (data.format === 'file') body = await file(data.body);
+      else if (data.format === 'form') {
+        body = [];
+        for (const entry of data.body) {
+          let value = entry.file ? await file(entry.value) : entry.value;
+          if (!entry.file && data.chat) value = new URLSearchParams(rewrite(new URLSearchParams([[entry.key, value]]).toString(), maskText, found)).get(entry.key);
+          body.push({ key: entry.key, file: entry.file, value });
+        }
+      } else throw new Error('Unsupported masking format');
+      return body;
+    };
+    await processBody();
+    const values = [...candidates.keys()];
+    if (values.length) {
+      const response = await chrome.runtime.sendMessage({ type: 'privy-digests', values });
+      if (response?.error || !Array.isArray(response?.digests) || response.digests.length !== values.length || !response.digests.every(value => /^[0-9a-f]{12}$/.test(value))) throw new Error('Invalid private placeholders');
+      const digests = new Map(values.map((value, i) => [value, response.digests[i]]));
+      tokenize = value => {
+        if (!digests.has(value)) throw new Error('Unprepared masking value');
+        return digests.get(value);
+      };
+    }
+    found = Object.create(null);
+    warnings.length = 0;
+    const body = await processBody();
     const map = await getMap();
     for (const [placeholder, value] of Object.entries(found)) map[placeholder] = value;
     await setMap(map);

@@ -1,6 +1,6 @@
 (() => {
   const { isChatRequest } = window.piiRewrite;
-  const salt = [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
+  const requestPrefix = [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
   const pending = new Map();
   let token;
   let sequence = 0;
@@ -26,14 +26,14 @@
   });
   window.postMessage({ type: 'mask2ai-ready' }, '*');
   const rpc = (type, payload) => new Promise((resolve, reject) => {
-    const id = salt + ':' + ++sequence;
+    const id = requestPrefix + ':' + ++sequence;
     const timer = setTimeout(() => {
       pending.delete(id);
       reject(new Error('PrivyAI bridge did not respond'));
     }, 10000);
     pending.set(id, { resolve, reject, timer, type: type.replace('-request', '-result') });
     ready.then(() => {
-      if (pending.has(id)) window.postMessage({ type, token, id, salt, ...payload }, '*');
+      if (pending.has(id)) window.postMessage({ type, token, id, ...payload }, '*');
     });
   });
 

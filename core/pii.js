@@ -1,20 +1,13 @@
 (function (root, factory) {
-  const api = factory();
+  const api = factory(typeof module === 'object' && module.exports ? require('crypto') : null);
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.pii = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
-  const hash = s => {
-    let h1 = 0xdeadbeef;
-    let h2 = 0x41c6ce57;
-    for (let i = 0; i < s.length; i++) {
-      const ch = s.charCodeAt(i);
-      h1 = Math.imul(h1 ^ ch, 2654435761);
-      h2 = Math.imul(h2 ^ ch, 1597334677);
-    }
-    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-    return ((h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0')).slice(0, 12);
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (nodeCrypto) {
+  const createTokenizer = key => {
+    if (!nodeCrypto) throw new Error('A private tokenizer is required');
+    return value => nodeCrypto.createHmac('sha256', key).update(value).digest('hex').slice(0, 12);
   };
+  const defaultTokenizer = nodeCrypto ? createTokenizer(nodeCrypto.randomBytes(32)) : () => { throw new Error('A private tokenizer is required'); };
 
   const luhn = s => {
     const d = s.replace(/\D/g, '');
@@ -99,13 +92,13 @@
     return candidate.slice(0, end);
   };
 
-  const apply = (text, type, re, check, found, salt) => text.replace(re, (...args) => {
+  const apply = (text, type, re, check, found, tokenize) => text.replace(re, (...args) => {
     const m = type === 'EMAIL' ? emailPrefix(args[0]) : args[0];
     if (!m) return args[0];
     const val = typeof args[1] === 'string' ? args[1] : m;
-    if (check && !check(val)) return m;
-    if (config.allow.has(val)) return m;
-    const p = `__PII_${type}_${hash(salt ? salt + '\0' + val : val)}__`;
+    if (check && !check(val)) return args[0];
+    if (config.allow.has(val)) return args[0];
+    const p = `__PII_${type}_${tokenize(val)}__`;
     found[p] = val;
     return args[0].replace(val, p);
   });
@@ -131,10 +124,10 @@
     .sort((a, b) => b.length - a.length)
     .map(name => new RegExp('(?<![\\p{L}\\p{N}_])' + escape(name) + '(?![\\p{L}\\p{N}_])', 'gu'));
 
-  const mask = (text, found, salt = '') => {
-    for (const [type, re, check] of [...PATTERNS, ...config.extra]) if (!config.disable.has(type)) text = apply(text, type, re, check, found, salt);
-    if (!config.disable.has('NAME')) for (const re of namesFromEmails(found, text)) text = apply(text, 'NAME', re, null, found, salt);
-    if (!config.disable.has('NAME')) for (const re of repeatedNames(found)) text = apply(text, 'NAME', re, null, found, salt);
+  const mask = (text, found, tokenize = defaultTokenizer) => {
+    for (const [type, re, check] of [...PATTERNS, ...config.extra]) if (!config.disable.has(type)) text = apply(text, type, re, check, found, tokenize);
+    if (!config.disable.has('NAME')) for (const re of namesFromEmails(found, text)) text = apply(text, 'NAME', re, null, found, tokenize);
+    if (!config.disable.has('NAME')) for (const re of repeatedNames(found)) text = apply(text, 'NAME', re, null, found, tokenize);
     return text;
   };
   const unmask = (text, map) => {
@@ -150,5 +143,5 @@
     : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, deepMap(x, fn)]))
     : v;
 
-  return { mask, unmask, luhn, iban, chineseId, hasPlaceholder, deepMap, PLACEHOLDER, TYPES, configure };
+  return { createTokenizer, mask, unmask, luhn, iban, chineseId, hasPlaceholder, deepMap, PLACEHOLDER, TYPES, configure };
 });

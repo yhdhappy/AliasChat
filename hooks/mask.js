@@ -3,11 +3,29 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { mask, unmask, hasPlaceholder, deepMap, configure } = require('../core/pii.js');
+const { mask: maskValue, createTokenizer, unmask, hasPlaceholder, deepMap, configure } = require('../core/pii.js');
 const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 
 const dir = process.env.CLAUDE_PLUGIN_DATA || path.join(os.homedir(), '.claude', 'privyAI');
+let tokenize;
+const mask = (text, found) => {
+  if (!tokenize) {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const keyFile = path.join(dir, 'placeholder.key');
+    const temporary = path.join(dir, `placeholder-${crypto.randomBytes(16).toString('hex')}.tmp`);
+    try {
+      fs.writeFileSync(temporary, crypto.randomBytes(32), { mode: 0o600, flag: 'wx' });
+      try { fs.linkSync(temporary, keyFile); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+    } finally {
+      fs.rmSync(temporary, { force: true });
+    }
+    const key = fs.readFileSync(keyFile);
+    if (key.length !== 32) throw new Error('Invalid placeholder key');
+    tokenize = createTokenizer(key);
+  }
+  return maskValue(text, found, tokenize);
+};
 const file = id => path.join(dir, `${id}.jsonl`);
 const save = (id, found) => {
   const lines = Object.entries(found).map(([p, v]) => JSON.stringify({ p, v }) + '\n').join('');
