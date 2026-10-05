@@ -247,13 +247,15 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   const late = extension({}, {}, false, false, true);
   const missing = textNode(restorePlaceholder);
   await late.mutate(mutation(missing));
-  late.sessionStore.aliasMap = { [restorePlaceholder]: 'late@example.com' };
+  const alsoMissing = textNode(restorePlaceholder);
+  await late.mutate(mutation(alsoMissing));
   late.advanceTime(29999);
-  await late.mutate(mutation(missing));
+  await late.runUnmaskTimers();
   assert.strictEqual(missing.data, restorePlaceholder);
   late.advanceTime(1);
-  await late.mutate(mutation(missing));
-  assert.strictEqual(missing.data, 'late@example.com');
+  late.sessionStore.aliasMap = { [restorePlaceholder]: 'late@example.com' };
+  await late.runUnmaskTimers();
+  await until(() => missing.data === 'late@example.com' && alsoMissing.data === 'late@example.com');
   await runFile('sh', ['scripts/pack-extension.sh']);
   const archive = `dist/aliaschat-extension-${manifest.version}.zip`;
   const archiveFiles = (await runFile('unzip', ['-Z1', archive])).stdout.trim().split('\n');
@@ -307,10 +309,11 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   }
   assert.strictEqual(limited.bridgeMaskCalls, 20, 'Only ten accepted requests may run the two masking passes');
   assert.strictEqual(limited.runtimeRequests.filter(message => message.type === 'privy-digests').length, 10);
+  await limited.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'sent@example.com' }) });
+  assert.strictEqual(limited.requests.length, 1, 'Page probes must not exhaust the content request bucket');
+  assert(limited.requests[0].init.body.includes('__PII_EMAIL_'));
   const callsAtLimit = limited.bridgeMaskCalls;
   const runtimeAtLimit = limited.runtimeRequests.length;
-  await assert.rejects(limited.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'blocked@example.com' }) }), { message: limitError });
-  assert.strictEqual(limited.requests.length, 0, 'Exhausting the bucket must block the real send');
   limited.advanceTime(999);
   probe('too-soon');
   assert.strictEqual(replies().find(message => message.id === 'too-soon').error, limitError);
@@ -326,6 +329,26 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   await until(() => replies().filter(message => message.id.startsWith('refilled-')).length === 11);
   assert.strictEqual(replies().filter(message => message.id.startsWith('refilled-') && message.result).length, 10);
   assert.strictEqual(replies().find(message => message.id === 'refilled-10').error, limitError);
+  const batchUpload = extension();
+  await Promise.all(Array.from({ length: 20 }, (_, i) => batchUpload.page.fetch(url, {
+    method: 'POST', body: new File(['jane.doe@example.com,13800138000'], `batch-${i}.csv`)
+  })));
+  assert.strictEqual(batchUpload.requests.length, 20);
+  for (const request of batchUpload.requests) {
+    const text = await request.init.body.text();
+    assert(text.includes('__PII_EMAIL_') && text.includes('__PII_PHONE_CN_'));
+    assert(!text.includes('jane.doe@example.com') && !text.includes('13800138000'));
+  }
+  assert(!batchUpload.toasts.some(text => text.includes('too many') || text.includes('request blocked')));
+  assert(batchUpload.messages.filter(message => message.type === 'mask-request').every(message => message.via === 'content-script'));
+  const contentLimit = extension();
+  await Promise.all(Array.from({ length: 50 }, () => contentLimit.page.fetch(url, { method: 'POST', body: '{"prompt":"hello"}' })));
+  await assert.rejects(contentLimit.page.fetch(url, { method: 'POST', body: '{"prompt":"hello"}' }), { message: limitError });
+  contentLimit.advanceTime(99);
+  await assert.rejects(contentLimit.page.fetch(url, { method: 'POST', body: '{"prompt":"hello"}' }), { message: limitError });
+  contentLimit.advanceTime(1);
+  await contentLimit.page.fetch(url, { method: 'POST', body: '{"prompt":"hello"}' });
+  assert.strictEqual(contentLimit.requests.length, 51);
   for (const file of ['extension/content.js', 'extension/bridge.js']) {
     assert(!/postMessage\([^\n]*,\s*['"]\*['"]\)/.test(fs.readFileSync(file, 'utf8')), `${file} must not post to a wildcard origin`);
   }
@@ -648,11 +671,15 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     const decoded = new TextDecoder(littleEndian ? 'utf-16le' : 'utf-16be', { fatal: true }).decode(maskedBytes);
     assert(decoded.includes('__PII_EMAIL_') && !decoded.includes('jane.doe@example.com'));
   }
-  for (const bytes of [new Uint8Array([0xc4, 0xe3, 0xba, 0xc3]), new Uint8Array([0x61, 0, 0x62, 0]), new Uint8Array([0xff, 0xfe, 0x61])]) {
+  for (const bytes of [new Uint8Array([0xd5, 0xc5, 0xc8, 0xfd, 0x2c, ...encoder.encode('13800138000')]), new Uint8Array([0x61, 0, 0x62, 0]), new Uint8Array([0xff, 0xfe, 0x61])]) {
     const invalidEncoding = extension();
-    await invalidEncoding.page.fetch(url, { method: 'POST', body: new File([bytes], 'legacy.csv') });
-    assert.deepStrictEqual(new Uint8Array(await invalidEncoding.requests[0].init.body.arrayBuffer()), bytes);
-    assert(invalidEncoding.toasts.some(text => text.includes('text encoding could not be decoded safely')));
+    await assert.rejects(invalidEncoding.page.fetch(url, { method: 'POST', body: new File([bytes], 'legacy.csv') }), error => error.code === 'encoding-blocked');
+    assert.strictEqual(invalidEncoding.requests.length, 0);
+    assert(invalidEncoding.toasts.some(text => text.includes('encoding could not be decoded safely')));
+    const allowedEncoding = extension({ allowUnknownUploads: true });
+    await allowedEncoding.page.fetch(url, { method: 'POST', body: new File([bytes], 'legacy.csv') });
+    assert.deepStrictEqual(new Uint8Array(await allowedEncoding.requests[0].init.body.arrayBuffer()), bytes);
+    assert(allowedEncoding.toasts.some(text => text.includes('text encoding could not be decoded safely')));
   }
   const utf8Bom = new Uint8Array([0xef, 0xbb, 0xbf, ...encoder.encode('jane.doe@example.com')]);
   await ext.page.fetch(url, { method: 'POST', body: new File([utf8Bom], 'bom.txt') });

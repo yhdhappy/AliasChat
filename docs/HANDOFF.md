@@ -208,3 +208,26 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 - SSN detection validates area, group, and serial components and excludes the example 123-45-6789. The positive fixture uses area 219; the existing 111-11-1111 document regression remains passing. PHONE rejects SSN-shaped candidates so invalid area-000 values are not masked through the international phone pattern.
 - PHONE_CN excludes immediately plus-prefixed digits, allowing PHONE to mask the complete +14155552671 value. Plain 13800138000 remains PHONE_CN; regressions verify classifications, stored values, and restoration.
 - `timeout 60 node test.js`, `node test-security.js`, and final `npm test` passed (ok / office ok / security ok), with no timeout. Neither item was skipped; versions remain 0.7.0. No git commands were run.
+
+## N1/N5/N6/PHONE_CN regressions (2026-10-05)
+
+- N1: Text uploads with invalid or unsupported encodings fail closed with `encoding-blocked`, forwarded through bridge with a dedicated user message. `allowUnknownUploads` permits the unchanged bytes with an uninspected warning. Regressions include GBK CSV bytes containing 张三 and 13800138000, NUL-containing text and truncated UTF-16.
+- N5: Content interceptions carry `via: 'content-script'` and use an independent 50-token bucket refilling at 10/second; unmarked requests retain 10 tokens and 1/second. Regressions cover 20 simultaneous masked file uploads, strict enumeration, bucket independence and both refill boundaries. The marker is forgeable by page scripts; TECHNICAL documents this limitation.
+- N6: Unknown placeholder records retain affected text nodes. A 30-second expiry timer requeues eligible connected nodes and retries restoration without a new DOM mutation. Regression verifies the expiry boundary and restoration of two nodes after the mapping arrives.
+- PHONE_CN: Single-space 3/4/4 grouped Chinese mobile numbers are masked in full. Regressions preserve plain Chinese mobile classification, full plus-prefixed international phones and the standalone 138 value.
+- Each item was reproduced by a failing regression before its fix; relevant tests used `timeout 60`. Final `timeout 60 npm test` passed (ok / office ok / security ok). No items skipped and no git commands run; manifest/package remain 0.7.0.
+
+## CLI key lock recovery and PostToolUse failure intervention (2026-10-05)
+
+- Existing placeholder keys bypass locking and temporary-file cleanup. First creation polls every 100ms for up to five seconds, writes a 0600 owner.json with timestamp and PID in the lock directory, and recovers locks older than 60 seconds or owned by a nonexistent PID. Locks without valid metadata use directory mtime for expiry; active temporary keys remain protected during initialization.
+- Reviewed repository hook documentation and the Claude Code official hooks reference: https://code.claude.com/docs/en/hooks#posttooluse-decision-control . PostToolUse cannot undo a tool's effects; decision:block alone adds feedback. Errors now return continue:false, stopReason, a prominent systemMessage and additionalContext, and updatedToolOutput with strings emptied while preserving structure. Claude Code validates built-in output schemas and can reject replacements, so stopping processing is also required; behavior was verified through hook JSON, not a live Claude Code host.
+- Swift compilation uses a 120000ms timeout. The timeout option and compiler-timeout fallback were checked with a simulated darwin process and mocked compiler; no actual macOS Swift compilation was run.
+- Added test-hook-lock.js to npm test. Direct Node subprocess checks cover overlapping first initialization with delayed publication, matching HMAC tokens from the same complete key, existing-key lock bypass, old timestamp recovery, dead PID recovery, live-lock five-second timeout, and PostToolUse error intervention for Bash and MCP-named tools. Updated existing VM checks for owner metadata and initialization-only cleanup.
+- Verification: timeout 60 node test-hook-lock.js and final timeout 60 npm test passed (ok / office ok / security ok plus hook checks). Modified code has no trailing whitespace; manifest/package remain 0.7.0. No items skipped and no git commands run.
+
+## N3 Office numeric cells and documentation cleanup (2026-10-05)
+
+- Worksheet sheet*.xml numeric values matching existing PII detection are masked and converted to inline string cells; nonmatching numeric cells and shared-string indexes remain unchanged. XML text scanning now includes w:delText and w:instrText.
+- Regressions cover numeric Chinese phones and IDs, card numbers, ordinary years and amounts, shared strings, deleted text and field instructions.
+- TECHNICAL records unsupported Office parts and long-tail detection patterns. Marketplace ownership and README repository commands now point to yhdhappy/AliasChat; the plugin and marketplace IDs remain privy-ai. PRODUCT removes Gumroad payment and launch entries.
+- Verification: timeout 60 node test.js, timeout 60 node test-security.js and timeout 60 npm test passed. Modified files have no trailing whitespace; manifest/package remain 0.7.0. No items skipped and no git commands run.

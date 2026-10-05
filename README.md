@@ -101,14 +101,14 @@ Everything left of the API runs on your machine. AliasChat replaces the personal
 The Claude Code plugin keeps its existing `privy-ai` ID so current installs and commands remain compatible.
 
 ```
-/plugin install privy-ai --marketplace yhdhappy/privyAI
+/plugin install privy-ai --marketplace yhdhappy/AliasChat
 ```
 
 Claude Code asks you to confirm the marketplace source, then to pick a scope. On Claude Code older than 2.1.275, add the marketplace first:
 
 ```
-/plugin marketplace add yhdhappy/privyAI
-/plugin install privy-ai@privyAI
+/plugin marketplace add yhdhappy/AliasChat
+/plugin install privy-ai@privy-ai
 ```
 
 Choose the user scope to cover every project. Requires Node.js 18 or newer on `PATH`. To try a checkout without installing:

@@ -36,6 +36,7 @@
         text = new TextDecoder(encoding, { fatal: true }).decode(bytes.subarray(bom));
         if (text.includes('\u0000')) throw new Error('Unsupported text encoding');
       } catch {
+        if (!config.allowUnknownUploads) throw Object.assign(new Error('File upload blocked because its text encoding could not be decoded safely'), { code: 'encoding-blocked' });
         warn(file.name + ' was uploaded uninspected; its text encoding could not be decoded safely');
         return new File([file], maskFileName(file.name, maskText, found), { type: file.type, lastModified: file.lastModified });
       }

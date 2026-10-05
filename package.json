@@ -10,7 +10,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node test.js && node test-security.js",
+    "test": "node test.js && node test-security.js && node test-hook-lock.js",
     "prove": "node demo/prove.js",
     "verify:web": "node demo/verify-web.js"
   }

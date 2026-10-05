@@ -34,13 +34,15 @@ for (const value of ['219-45-6789', '111-11-1111', '001-01-0001', '899-99-9999']
   assert.deepStrictEqual(Object.values(ssns), [value]);
   assert.strictEqual(unmask(result, ssns), value);
 }
-for (const [value, type] of [['+14155552671', 'PHONE'], ['13800138000', 'PHONE_CN']]) {
+for (const [value, type] of [['+14155552671', 'PHONE'], ['13800138000', 'PHONE_CN'], ['138 0013 8000', 'PHONE_CN']]) {
   const phones = {};
   const result = mask(value, phones);
   assert(new RegExp('^__PII_' + type + '_[0-9a-f]{12}__$').test(result), result);
   assert.deepStrictEqual(Object.values(phones), [value]);
   assert.strictEqual(unmask(result, phones), value);
 }
+
+assert.strictEqual(mask('138', {}), '138');
 
 for (const secret of [
   'ghp_AbCdEf0123456789GhIj',
@@ -179,6 +181,32 @@ assert.deepStrictEqual(JSON.parse(fieldForm.get("state")), fieldBody);
   assert.strictEqual(office.kind("notes.txt"), null);
   const same = await office.mask(await zip.write([{ name: "word/document.xml", data: te.encode("<w:t>nothing here</w:t>") }]), mask, {});
   assert(await zip.read(same));
+  const wordFields = '<w:document><w:delText xml:space="preserve">deleted@example.com &amp; archived</w:delText><w:instrText xml:space="preserve"> HYPERLINK "mailto:field@example.com" </w:instrText><w:delText>ordinary deleted text</w:delText><w:instrText> PAGE </w:instrText></w:document>';
+  const fieldMap = {};
+  const wordFieldZip = await office.mask(await zip.write([{ name: 'word/document.xml', data: te.encode(wordFields) }]), mask, fieldMap);
+  const maskedFields = new TextDecoder().decode((await zip.read(wordFieldZip))[0].data);
+  assert(!maskedFields.includes('deleted@example.com') && !maskedFields.includes('field@example.com'), maskedFields);
+  assert(maskedFields.includes('<w:delText xml:space="preserve">__PII_EMAIL_'), maskedFields);
+  assert(maskedFields.includes('<w:instrText xml:space="preserve"> HYPERLINK "mailto:__PII_EMAIL_'), maskedFields);
+  assert.strictEqual(unmask(maskedFields, fieldMap), wordFields);
+  const sheet = '<worksheet><sheetData><row><c r="A1"><v>13800138000</v></c><c r="B1" s="2" t="n"><v>110105194912310003</v></c><c r="C1" t="n"><v>4111111111111111</v></c><c r="D1"><v>2026</v></c><c r="E1" t="n"><v>1234.56</v></c><c r="F1"><v>42</v></c><c r="G1" t="s"><v>13800138000</v></c><c r="H1"><v>-123</v></c></row></sheetData></worksheet>';
+  const sheetMap = {};
+  const workbook = await zip.write([
+    { name: 'xl/worksheets/sheet1.xml', data: te.encode(sheet) },
+    { name: 'xl/worksheets/sheet2.xml', data: te.encode('<worksheet><c><v>2026</v></c></worksheet>') },
+    { name: 'xl/sharedStrings.xml', data: te.encode('<sst><si><t>sheet@example.com</t></si></sst>') }
+  ]);
+  const maskedWorkbook = await zip.read(await office.mask(workbook, mask, sheetMap));
+  const maskedSheet = new TextDecoder().decode(maskedWorkbook.find(e => e.name === 'xl/worksheets/sheet1.xml').data);
+  for (const [ref, type] of [['A1', 'PHONE_CN'], ['B1', 'ID_CN'], ['C1', 'CARD']]) {
+    assert(new RegExp('<c r="' + ref + '"[^>]*t="inlineStr"><is><t>__PII_' + type + '_[0-9a-f]{12}__</t></is></c>').test(maskedSheet), maskedSheet);
+  }
+  for (const ref of ['D1', 'E1', 'F1', 'G1', 'H1']) {
+    assert(maskedSheet.includes(sheet.match(new RegExp('<c r="' + ref + '"[^>]*>.*?</c>'))[0]), maskedSheet);
+  }
+  assert.deepStrictEqual(Object.values(sheetMap).sort(), ['13800138000', '110105194912310003', '4111111111111111', 'sheet@example.com'].sort());
+  assert.strictEqual(new TextDecoder().decode(maskedWorkbook.find(e => e.name === 'xl/worksheets/sheet2.xml').data), '<worksheet><c><v>2026</v></c></worksheet>');
+  assert(new TextDecoder().decode(maskedWorkbook.find(e => e.name === 'xl/sharedStrings.xml').data).includes('__PII_EMAIL_'));
   const ff = {};
   const docxFile = new File([docx], "Contact.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   const maskedDocx = await files.maskFile(docxFile, mask, ff);
@@ -227,7 +255,7 @@ const run = (input, pluginData = data, home, fsOverrides = {}, stdin) => {
     require: isolatedRequire,
     module: hookModule,
     __dirname: path.join(__dirname, 'hooks'),
-    process: { env: { ...(pluginData ? { CLAUDE_PLUGIN_DATA: pluginData } : {}), PATH: '' }, platform: process.platform, stdout: { write: text => { output += text; } } }
+    process: { env: { ...(pluginData ? { CLAUDE_PLUGIN_DATA: pluginData } : {}), PATH: '' }, platform: process.platform, pid: process.pid, kill: process.kill, stdout: { write: text => { output += text; } } }
   }, { filename: 'hooks/mask.js', timeout: 10000 });
   return output ? JSON.parse(output) : null;
 };
@@ -258,7 +286,11 @@ for (const hook_event_name of ['SessionStart', 'PostToolUse', 'PreToolUse', 'Mes
   const failure = run({ hook_event_name }, data, undefined, {
     existsSync: () => { throw new Error('Config unreadable'); }
   });
-  if (hook_event_name === 'SessionStart' || hook_event_name === 'PostToolUse') assert(failure.systemMessage.includes('AliasChat did not mask'));
+  if (hook_event_name === 'PostToolUse') {
+    assert.strictEqual(failure.continue, false);
+    assert.strictEqual(failure.decision, 'block');
+    assert(failure.systemMessage.includes('ALIASCHAT SECURITY FAILURE'));
+  } else if (hook_event_name === 'SessionStart') assert(failure.systemMessage.includes('AliasChat did not mask'));
   else assert.strictEqual(failure, null);
 }
 
@@ -267,14 +299,12 @@ const atomicKey = path.join(atomicData, 'placeholder.key');
 let renamedKey = false;
 run({ hook_event_name: 'UserPromptSubmit', prompt: 'email private@example.com' }, atomicData, undefined, {
   writeFileSync: (file, content, options) => {
+    if (path.basename(file) === 'owner.json') return fs.writeFileSync(file, content, options);
     assert(!fs.existsSync(atomicKey), 'The final key must not be readable during the write');
     assert(/^placeholder-.*\.tmp$/.test(path.basename(file)));
     assert.strictEqual(content.length, 32);
     assert.strictEqual(options.mode, 0o600);
     fs.writeFileSync(file, content, options);
-    const concurrent = run({ hook_event_name: 'UserPromptSubmit', prompt: 'email other@example.com' }, atomicData);
-    assert.strictEqual(concurrent.decision, 'block');
-    assert.strictEqual(concurrent.suppressOriginalPrompt, true);
     assert(fs.existsSync(file), 'A concurrent hook must not remove an active temporary key');
   },
   renameSync: (source, target) => {
@@ -292,6 +322,7 @@ assert.deepStrictEqual(fs.readdirSync(atomicData), ['placeholder.key', 's1.jsonl
 const interruptedData = path.join(data, 'interrupted');
 const interrupted = run({ hook_event_name: 'UserPromptSubmit', prompt: 'email private@example.com' }, interruptedData, undefined, {
   writeFileSync: (file, content, options) => {
+    if (path.basename(file) === 'owner.json') return fs.writeFileSync(file, content, options);
     fs.writeFileSync(file, content.subarray(0, 8), options);
     throw new Error('Key write interrupted');
   }
@@ -305,7 +336,7 @@ assert.strictEqual(fs.readFileSync(path.join(interruptedData, 'placeholder.key')
 const staleTemporary = path.join(data, 'placeholder-stale.tmp');
 fs.writeFileSync(staleTemporary, 'incomplete key');
 assert.strictEqual(run({ hook_event_name: 'UserPromptSubmit', prompt: 'email ali@example.com about it' }).reason, blocked.reason);
-assert(!fs.existsSync(staleTemporary), 'Stale placeholder key files must be cleaned up');
+assert(fs.existsSync(staleTemporary), 'Existing keys must bypass initialization cleanup');
 const permissiveData = path.join(data, 'permissive');
 fs.mkdirSync(permissiveData, { mode: 0o755 });
 fs.chmodSync(permissiveData, 0o755);

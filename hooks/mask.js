@@ -21,28 +21,61 @@ const mask = (text, found) => {
     ensureDir(dir);
     const keyFile = path.join(dir, 'placeholder.key');
     const lockDir = path.join(dir, 'placeholder-key.lock');
-    try {
-      fs.mkdirSync(lockDir, { mode: 0o700 });
-    } catch (error) {
-      if (error.code === 'EEXIST') throw new Error('Placeholder key initialization is locked; retry or remove a stale placeholder-key.lock directory');
-      throw error;
-    }
-    try {
-      for (const name of fs.readdirSync(dir)) if (/^placeholder-.*\.tmp$/.test(name)) fs.rmSync(path.join(dir, name), { force: true });
-      if (legacyDir && fs.existsSync(path.join(legacyDir, 'placeholder.key'))) {
-        try { fs.copyFileSync(path.join(legacyDir, 'placeholder.key'), keyFile, fs.constants.COPYFILE_EXCL); } catch (error) { if (error.code !== 'EEXIST') throw error; }
-      }
-      if (!fs.existsSync(keyFile)) {
-        const temporary = path.join(dir, `placeholder-${crypto.randomBytes(16).toString('hex')}.tmp`);
+    if (!fs.existsSync(keyFile)) {
+      const deadline = Date.now() + 5000;
+      const sleeper = new Int32Array(new SharedArrayBuffer(4));
+      let locked = false;
+      while (!fs.existsSync(keyFile)) {
         try {
-          fs.writeFileSync(temporary, crypto.randomBytes(32), { mode: 0o600, flag: 'wx' });
-          fs.renameSync(temporary, keyFile);
-        } finally {
-          fs.rmSync(temporary, { force: true });
+          fs.mkdirSync(lockDir, { mode: 0o700 });
+          locked = true;
+          break;
+        } catch (error) {
+          if (error.code !== 'EEXIST') throw error;
         }
+        try {
+          const stat = fs.statSync(lockDir);
+          let timestamp = stat.mtimeMs;
+          let dead = false;
+          try {
+            const owner = JSON.parse(fs.readFileSync(path.join(lockDir, 'owner.json'), 'utf8'));
+            if (Number.isFinite(owner.timestamp)) timestamp = owner.timestamp;
+            if (Number.isInteger(owner.pid) && owner.pid > 0) {
+              try { process.kill(owner.pid, 0); } catch (error) { if (error.code === 'ESRCH') dead = true; }
+            }
+          } catch (error) {
+            if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
+          }
+          if (Date.now() - timestamp > 60000 || dead) {
+            const current = fs.statSync(lockDir);
+            if (current.ino === stat.ino && current.mtimeMs === stat.mtimeMs) fs.rmSync(lockDir, { recursive: true, force: true });
+          }
+        } catch (error) {
+          if (error.code !== 'ENOENT') throw error;
+        }
+        if (Date.now() >= deadline) throw new Error('Placeholder key initialization is locked; timed out after 5 seconds');
+        Atomics.wait(sleeper, 0, 0, Math.min(100, deadline - Date.now()));
       }
-    } finally {
-      fs.rmdirSync(lockDir);
+      if (locked) try {
+        fs.writeFileSync(path.join(lockDir, 'owner.json'), JSON.stringify({ timestamp: Date.now(), pid: process.pid }), { mode: 0o600, flag: 'wx' });
+        if (!fs.existsSync(keyFile)) {
+          for (const name of fs.readdirSync(dir)) if (/^placeholder-.*\.tmp$/.test(name)) fs.rmSync(path.join(dir, name), { force: true });
+          if (legacyDir && fs.existsSync(path.join(legacyDir, 'placeholder.key'))) {
+            try { fs.copyFileSync(path.join(legacyDir, 'placeholder.key'), keyFile, fs.constants.COPYFILE_EXCL); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+          }
+          if (!fs.existsSync(keyFile)) {
+            const temporary = path.join(dir, `placeholder-${crypto.randomBytes(16).toString('hex')}.tmp`);
+            try {
+              fs.writeFileSync(temporary, crypto.randomBytes(32), { mode: 0o600, flag: 'wx' });
+              fs.renameSync(temporary, keyFile);
+            } finally {
+              fs.rmSync(temporary, { force: true });
+            }
+          }
+        }
+      } finally {
+        fs.rmSync(lockDir, { recursive: true, force: true });
+      }
     }
     const key = fs.readFileSync(keyFile);
     if (key.length !== 32) throw new Error('Invalid placeholder key');
@@ -83,7 +116,7 @@ const visionBinary = () => {
   try {
     if (!fs.existsSync(bin) || fs.statSync(bin).mtimeMs < fs.statSync(src).mtimeMs) {
       ensureDir(dir);
-      execFileSync('swiftc', ['-O', '-o', bin, src], { stdio: 'ignore' });
+      execFileSync('swiftc', ['-O', '-o', bin, src], { stdio: 'ignore', timeout: 120000 });
     }
     return bin;
   } catch {
@@ -259,8 +292,23 @@ const main = () => {
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
     switch (input && input.hook_event_name) {
+      case 'PostToolUse': {
+        const warning = 'ALIASCHAT SECURITY FAILURE: tool output was NOT masked. Processing stopped; fix AliasChat before continuing.';
+        out({
+          continue: false,
+          stopReason: warning,
+          decision: 'block',
+          reason: warning,
+          systemMessage: warning,
+          hookSpecificOutput: {
+            hookEventName: 'PostToolUse',
+            additionalContext: warning,
+            updatedToolOutput: deepMap(input.tool_response, () => '')
+          }
+        });
+        break;
+      }
       case 'SessionStart':
-      case 'PostToolUse':
         out({ systemMessage: `AliasChat error: ${message}. AliasChat did not mask this event.` });
         break;
       case 'PreToolUse':

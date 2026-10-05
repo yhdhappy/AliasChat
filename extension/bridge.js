@@ -30,10 +30,8 @@
     if (response?.error) throw Object.assign(new Error(response.error), { code: 'map-storage-error' });
   };
   let queue = Promise.resolve();
-  const MASK_CAPACITY = 10;
-  const MASK_REFILL_MS = 10000;
-  let maskTokens = MASK_CAPACITY;
-  let maskRefilledAt = performance.now();
+  const pageBucket = { capacity: 10, refillPerMs: 1 / 1000, tokens: 10, refilledAt: performance.now() };
+  const contentBucket = { capacity: 50, refillPerMs: 10 / 1000, tokens: 50, refilledAt: performance.now() };
   let userConfig = {};
   const ready = new Promise((resolve, reject) => chrome.storage.sync.get('config', ({ config }) => {
     try {
@@ -99,16 +97,17 @@
     if (data.type === 'mask2ai-ready') return sendConfig();
     if (data.token !== token || data.type !== 'mask-request' || typeof data.id !== 'string') return;
     const now = performance.now();
-    maskTokens = Math.min(MASK_CAPACITY, maskTokens + (now - maskRefilledAt) * MASK_CAPACITY / MASK_REFILL_MS);
-    maskRefilledAt = now;
-    if (maskTokens < 1) {
+    const bucket = data.via === 'content-script' ? contentBucket : pageBucket;
+    bucket.tokens = Math.min(bucket.capacity, bucket.tokens + (now - bucket.refilledAt) * bucket.refillPerMs);
+    bucket.refilledAt = now;
+    if (bucket.tokens < 1) {
       window.postMessage({ type: 'mask-result', token, id: data.id, error: 'AliasChat is handling too many masking requests; please wait a moment and resend.' }, location.origin);
       return;
     }
-    maskTokens--;
+    bucket.tokens--;
     queue = queue.then(async () => {
       try { window.postMessage({ type: 'mask-result', token, id: data.id, result: await run(data) }, location.origin); }
-      catch (error) { window.postMessage({ type: 'mask-result', token, id: data.id, error: error.code === 'map-storage-error' ? error.message : 'AliasChat could not process personal data safely', code: ['opaque-blocked', 'unknown-blocked', 'map-storage-error'].includes(error.code) ? error.code : undefined }, location.origin); }
+      catch (error) { window.postMessage({ type: 'mask-result', token, id: data.id, error: error.code === 'map-storage-error' ? error.message : 'AliasChat could not process personal data safely', code: ['opaque-blocked', 'unknown-blocked', 'encoding-blocked', 'map-storage-error'].includes(error.code) ? error.code : undefined }, location.origin); }
     });
   });
   sendConfig();
@@ -117,6 +116,7 @@
   const unknownPlaceholders = new Map();
   const pendingNodes = new Set();
   let unmaskTimer;
+  let unknownTimer;
   const PLACEHOLDER_RE = /__PII_[A-Z_]+_(?:[0-9a-f]{12}|[0-9a-f]{6})__/g;
   let unmaskWindowStart = 0;
   let unmaskCount = 0;
@@ -134,6 +134,22 @@
     }
     return flushUnmask();
   }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  const scheduleUnknown = () => {
+    if (unknownTimer || !unknownPlaceholders.size) return;
+    let expiresAt = Infinity;
+    for (const record of unknownPlaceholders.values()) expiresAt = Math.min(expiresAt, record.seenAt + 30000);
+    unknownTimer = setTimeout(async () => {
+      unknownTimer = undefined;
+      const now = Date.now();
+      for (const [placeholder, record] of unknownPlaceholders) {
+        if (now - record.seenAt < 30000) continue;
+        unknownPlaceholders.delete(placeholder);
+        for (const node of record.nodes) if (node.isConnected !== false && eligible(node)) pendingNodes.add(node);
+      }
+      await flushUnmask();
+      scheduleUnknown();
+    }, Math.max(0, expiresAt - Date.now()));
+  };
   const flushUnmask = async () => {
     if (!pendingNodes.size) return;
     const now = Date.now();
@@ -154,7 +170,8 @@
     const targets = nodes.filter(node => {
       if (!eligible(node)) return false;
       const placeholders = node.data.match(PLACEHOLDER_RE) || [];
-      return placeholders.some(p => !unknownPlaceholders.has(p) || now - unknownPlaceholders.get(p) >= 30000);
+      for (const p of placeholders) unknownPlaceholders.get(p)?.nodes.add(node);
+      return placeholders.some(p => !unknownPlaceholders.has(p) || now - unknownPlaceholders.get(p).seenAt >= 30000);
     });
     if (!targets.length) return;
     const values = await getMap();
@@ -162,8 +179,13 @@
     const body = original.map(text => unmask(text, values));
     for (let i = 0; i < targets.length; i++) {
       const placeholders = original[i].match(PLACEHOLDER_RE) || [];
-      for (const p of placeholders) if (body[i].includes(p)) unknownPlaceholders.set(p, now);
+      for (const p of placeholders) {
+        if (!body[i].includes(p)) continue;
+        if (!unknownPlaceholders.has(p)) unknownPlaceholders.set(p, { seenAt: now, nodes: new Set() });
+        unknownPlaceholders.get(p).nodes.add(targets[i]);
+      }
     }
+    scheduleUnknown();
     const updates = targets.map((node, i) => ({ node, before: original[i], after: body[i] })).filter(({ node, before, after }) => after !== before && node.data === before && eligible(node));
     if (!updates.length) return;
     const applied = [];

@@ -3,8 +3,8 @@
   "name": "privy-ai",
   "description": "AliasChat personal data masking for Claude Code.",
   "owner": {
-    "name": "Serkan Korkut",
-    "url": "https://github.com/serkankorkut"
+    "name": "yhdhappy",
+    "url": "https://github.com/yhdhappy/AliasChat"
   },
   "plugins": [
     {

@@ -40,7 +40,6 @@ AliasChat 的定位是**防误发**，不是军工级隐私保证。宣传口径
 ## 变现
 
 - 免费核心 + 付费高级版。
-- 收款：Gumroad 起手（一次性买断），做大后切 Lemon Squeezy（订阅）/ Paddle。
 - 分发：Chrome 商店（$5 一次性注册费）、Edge（免费）、Firefox（计划支持，需先添加 background.scripts 和 gecko id）。
 - 获客：Product Hunt 首发、Hacker News Show HN、Reddit 相关版块，后期 AppSumo。
 
@@ -53,7 +52,6 @@ AliasChat 的定位是**防误发**，不是军工级隐私保证。宣传口径
 | Phase 1b | 8 项安全加固（见技术文档） | ✅ |
 | Phase 1c | 改名为 AliasChat，保留旧存储与 CLI 数据读取兼容 | ✅ |
 | Phase 2 | 商店物料：截图、描述文案 | ⬜ |
-| Phase 3 | Gumroad 上架 + license 验证 | ⬜ |
 | Phase 4 | Chrome / Edge 商店上架 | ⬜ |
 | Phase 5 | Product Hunt / Reddit 获客 | ⬜ |
 

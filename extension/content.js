@@ -50,9 +50,11 @@
     ? 'PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them in AliasChat options (allowOpaqueUploads).'
     : error?.code === 'unknown-blocked'
       ? 'Unsupported file uploads are blocked because they cannot be inspected. You can allow them in AliasChat options (allowUnknownUploads).'
-      : error?.code === 'map-storage-error'
-        ? error.message
-        : 'could not mask personal data; request blocked', 6000);
+      : error?.code === 'encoding-blocked'
+        ? 'File upload blocked because its text encoding could not be decoded safely. You can allow uninspected uploads in AliasChat options (allowUnknownUploads).'
+        : error?.code === 'map-storage-error'
+          ? error.message
+          : 'could not mask personal data; request blocked', 6000);
   document.addEventListener('DOMContentLoaded', () => show('on, personal data is masked before sending', 4000));
 
   const gunzip = bytes => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
@@ -90,7 +92,7 @@
       } else throw new Error('Unsupported chat request body');
     }
     if (!payload) return body;
-    const result = await rpc('mask-request', payload);
+    const result = await rpc('mask-request', { ...payload, via: 'content-script' });
     for (const name of result.warnings) show(name, 6000);
     if (result.count) show(`masked ${result.count} value${result.count === 1 ? '' : 's'} before sending`, 4000);
     return restore(result.body);
