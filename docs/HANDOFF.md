@@ -6,7 +6,7 @@
 AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用户消息发往 ChatGPT / Claude 网页版之前，把检测到的个人敏感信息替换成占位符，回答回来后在屏幕上还原真值。变现：planned monetization (TBD)。
 
 ## 关键决策（已定，不许擅改）
-- 当前品牌名：AliasChat（2026-10-05 改名；上一个品牌名 PrivyAI，最初名称 VeilAI）
+- 当前品牌名：AliasChat（2026-10-05 改名）
 - Logo：第 1 个方案（盾牌+气泡+面纱）
 - 基准项目：serkankorkut/mask2ai v0.6.0，MIT（Copyright 2026 Serkan Korkut，LICENSE 必须原样保留）
 - 仓库：github.com/yhdhappy/AliasChat（public；当前 GitHub API 将仓库报告为 AliasChat，push 继续使用工作区配置的 origin）
@@ -17,8 +17,8 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 ## 当前进度
 - [x] Phase 0 验货：仓库真实、MIT 确认、npm test 通过、机制读懂
 - [x] 仓库建立 + 代码推送（2026-10-04 凌晨）
-- [x] Logo：第 1 方案（盾牌+气泡+面纱），已切 16/32/48/128 换进 extension/icons/，原图存 brand/privyAI-logo-original.png（2026-10-04 早）
-- [x] Phase 1：品牌重命名 mask2ai→PrivyAI + 去 Turkish（2026-10-04 上午，automated coding agents 执行与审查 FAIL→修完 7 项→PASS）
+- [x] Logo：第 1 方案（盾牌+气泡+面纱），已切 16/32/48/128 换进 extension/icons/（2026-10-04 早）
+- [x] Phase 1：品牌重命名 + 去 Turkish（2026-10-04 上午，automated coding agents 执行与审查 FAIL→修完 7 项→PASS）
   - 改名：manifest/README/store listing/options.html/content.js toast/hooks/plugin.json/marketplace.json/demo 脚本；插件统一 kebab-case 身份 `privy-ai`；LICENSE 未动
   - 去 Turkish：删 TCKN 校验+模式、PLATE、土耳其地址/DOB/证件/姓名线索、FOLD 字符映射、土耳其手机号格式；保留 `\b0\d{4} ?\d{6}\b`（实为英国手机号，测试要求）
   - 刻意保留的旧配置入口和内部标识（兼容性）：MASK2AI_CONFIG、`~/.mask2ai/config.json`、`.mask2ai.json`、`data-mask2ai`、`mask2ai-config` postMessage、CLI 插件 ID `privy-ai`、JS 命名空间
@@ -48,7 +48,6 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 - 变现：planned monetization (TBD)
 
 ## 待办修改清单（2026-10-04 记，等 Claude Chat 审核完统一改）
-> 达叔指示：先记下来，等 Claude 审核完毕后，与审核发现的问题一起统一修改。
 > 更新 2026-10-04 12:05：Claude 审核完成，A 级已修；欢迎页已按审核报告第 5 节建议实现（见下）。
 
 ### 代码层面（automated coding agents 执行）
@@ -63,11 +62,7 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 3. **~~store/listing.md 按 8 月新规复查~~ ✅ 已完成（2026-10-04）**
    - 数据披露移到 Description 最前面；全文件扫描无 bypass/evade/hide from AI 等敏感词。
 
-### 本地维护事项
-4. **Mac 上多余的 privyAI 文件夹**
-   - 路径：`<local machine>`（误 clone 的）
-   - 要做：确认删除（之前移废纸篓审批超时，未确认）。
-
+### 发布配置
 5. **GitHub Pages 开通（已完成）**
    - 已开启：main 分支的 docs 文件夹。
    - 目的：让 `https://yhdhappy.github.io/AliasChat/privacy.html` 生效（商店隐私政策 URL 用）。
@@ -83,7 +78,6 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
    - 变现：planned monetization (TBD)
 
 ## Claude 审核 A 级修复（2026-10-04 完成）
-> 审核报告：`<local machine>`（达叔 Mac 本地）
 
 - [x] **A1 无限循环（CRITICAL）**：`extension/content.js` 的 MutationObserver 在 unmask 找不到映射时写回原文触发死循环。修复：只在 `after !== before` 时写回；用 `unknownPlaceholders` Set 跳过已知无映射的占位符；每秒最多 10 次 unmask 请求限流。
 - [x] **A2 刷新丢映射（CRITICAL UX）**：`extension/bridge.js` 的 `Map` 改存 `chrome.storage.session`（刷新保留、关浏览器清除、网页不可读）。新增 `extension/background.js` service worker（manifest.json 注册），`scripts/pack-extension.sh` 打包时包含它。
@@ -92,14 +86,14 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 - [x] **A5.1 还原逻辑进隔离世界**：MutationObserver 从 `content.js`（MAIN）搬到 `bridge.js`（isolated），直接读 map 无需 RPC；彻底删除 `unmask-request` postMessage 接口（`content.js` 和 `bridge.js` 双向）；`content.js` 的 XHR 响应还原逻辑删除（页面 JS 只见占位符，DOM 显示由 observer 还原，更安全）。
 - [x] **A5.2 PDF/图片默认拦截**：`core/pii.js` 新增 `allowOpaqueUploads` 配置（默认 false）；`extension/bridge.js` 默认抛错拦截，`options.html` 说明该选项。
 - [x] **A5.3 文档去过度承诺**：`store/listing.md` 和 `docs/privacy.html` 的 "The model only ever sees placeholders" 改为 "replaces the personal data it detects"；新增 Limitations 章节；存储描述更新为 session storage。
-- [x] **A7 清理旧作者文件**：`AGENTS.md` 重写为 PrivyAI 专用；删除仓库根 `HANDOFF.md`（只留 `docs/HANDOFF.md`）。
+- [x] **A7 清理旧作者文件**：`AGENTS.md` 重写为项目专用；删除仓库根 `HANDOFF.md`（只留 `docs/HANDOFF.md`）。
 - [x] **C2 署名修正**：`LICENSE` 加 `Copyright (c) 2026 yhdhappy`（保留原作者）；`package.json`、`​.claude-plugin/plugin.json` 作者改为 yhdhappy；`README.md` 加 "Based on mask2ai (MIT) by Serkan Korkut"。
 - [ ] **待做（Chrome 8月新规）**：首次运行同意弹窗（见上方待办第 1 项）。
 - [ ] **待做**：`docs/PRODUCT.md` 状态校准为"已完成"（见上方待办第 2 项）。
 
 ## 上架前收尾（2026-10-04，0.7.0）
 
-- 当时隐私政策链接使用 PrivyAI 的 Pages 路径；AliasChat 改名后链接已改为 `https://yhdhappy.github.io/AliasChat/privacy.html`。
+- 隐私政策链接已改为 `https://yhdhappy.github.io/AliasChat/privacy.html`。
 - 版本统一为 0.7.0；当时补充的 `extension/manifest.json` 副本现已删除，根目录 `manifest.json` 是唯一清单。
 - PDF/图片默认拦截通过 `opaque-blocked` 错误码显示专用提示；options 说明允许上传的方法和文件不会被遮蔽的风险。
 - 删除页面 `map-clear` 接口；映射继续保存在 `chrome.storage.session`，页面消息不能清除映射。
@@ -114,8 +108,6 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 - 请求覆盖核查：历史交接明确将 retry_completion 留给真账号抓包，当前无相关固件；title 和 message_content 的真实请求结构仍待确认。规则合成探针及 Mac 编辑/重试/重新生成/标题抓包步骤见 docs/REQUEST-COVERAGE.md；未猜测或扩大运行时白名单。
 - README 按实际代码修正默认 PDF/图片拦截、session 映射生命周期、检测范围承诺、保密 HMAC 密钥、单向遮蔽消息与 isolated DOM 还原；明确网站脚本可读取恢复后的 DOM 真值。
 - 四项分别提交前均运行 npm test（node test.js && node test-security.js）通过。未运行 demo/verify-web.js（沙箱 Chromium 启动崩溃）；真实站点抓包仍待 Mac 端补充。版本保持 0.7.0（manifest/package 一致）。
-- 原工作区 .git 只读，提交在 /tmp/privyai-four-fixes 临时克隆中完成；修复文件同步回原工作区。
-- 推送未完成：git push 无法连接沙箱网络代理；已连接 GitHub 的 create_tree 写入被自动审批拒绝（需要审批，但 approval policy 为 never）。四个提交保留在临时克隆，另导出 /tmp/privyai-four-fixes.bundle；可在有写权限及网络的基线仓库 fetch bundle 后 fast-forward main 并 push。
 
 ## automated coding agents 审查问题修复（2026-10-05）
 
@@ -123,16 +115,14 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 - 安装/更新时清除 HMAC 密钥缓存；密钥导入失败允许重试；无效长度的 session 密钥重新生成。
 - CLI 密钥文件用 `writeFileSync` 的 `wx` 原子创建，读取并复用已存在密钥，清理残留 `.tmp`；目录创建统一收敛到 `ensureDir` 并设为 `0700`。
 - 补充相邻邮箱、单趟处理、更新轮换、导入重试、密钥长度、临时文件清理、目录权限、HMAC 不可导出及 runtime 消息体密钥隔离测试。`npm test` 通过（ok / office ok / security ok）；manifest/package 版本仍为 0.7.0。
-- 九个单独提交在 `/tmp/privyai-review-fixes`，bundle 在 `/tmp/privyai-review-fixes.bundle`。工作区 `.git` 只读；`git push origin main` 因沙箱代理无法连接失败，GitHub connector 的写入调用被自动审批拒绝（approval policy 为 never），因此尚未推送。
 
 ## AliasChat 品牌改名（2026-10-05）
 
 - 浏览器扩展名称、商店文案、README、`docs/`、CLI 提示、欢迎页和设置页统一使用 AliasChat；版本仍为 0.7.0。
 - extension session key 从 `privyMap` 迁移到 `aliasMap`。旧 key 存在时首次读取会合并并复制到新 key；更新处理不会主动清空 map，并轮换 HMAC key。Chrome 自身会在扩展更新或重载时清空 `storage.session`，所以该迁移只能读取仍留在 session storage 中的旧 map。
 - 新 CLI 数据写入 `~/.claude/aliaschat/`；读取旧 `~/.claude/privyAI/` 的映射和 placeholder key。原有配置入口 `MASK2AI_CONFIG`、`.mask2ai.json`、`~/.mask2ai/config.json` 与 Claude 插件 ID `privy-ai` 继续支持。
-- 仓库链接和隐私政策链接指向 AliasChat；工作区 `origin` 当前指向 AliasChat URL。本次推送受沙箱网络和 MCP 写入审批限制，临时克隆中的提交及 bundle 路径记录在交接更新末尾。
+- 仓库链接和隐私政策链接指向 AliasChat；工作区 `origin` 当前指向 AliasChat URL。
 - 验证：`npm test` 通过（ok / office ok / security ok）；未运行 `demo/verify-web.js`，沙箱 Chromium 启动会崩溃。
-- 提交在 `/tmp/aliaschat-rename` 可写临时克隆创建；bundle 保存为 `/tmp/aliaschat-rename.bundle`。push 因沙箱代理不可达失败，GitHub MCP 对 blob 写入返回“requires approval, but approval policy is never”。
 
 ## H1 邮箱正则性能修复（2026-10-05）
 
@@ -161,7 +151,7 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 ## H4 CLI hook fail-closed 与密钥原子写入（2026-10-05）
 
 - `hooks/mask.js` 的 main 增加 try/catch：UserPromptSubmit 出错输出 block + suppressOriginalPrompt；stdin JSON 无法解析时同样拦截。SessionStart/PostToolUse 输出错误 systemMessage，PreToolUse/MessageDisplay/SessionEnd 出错不输出且不抛出。
-- 新密钥写入同目录随机 0600 临时文件，再 rename 发布；保留旧 privyAI 密钥复制、0700 目录处理与残留 tmp 清理。独占 `placeholder-key.lock` 目录避免并发覆盖密钥或删除正在写入的 tmp；竞争时 fail closed 后重试。硬杀进程可能留下锁目录，需确认无 hook 正在初始化后删除该残留目录再重发。
+- 新密钥写入同目录随机 0600 临时文件，再 rename 发布；保留旧密钥复制、0700 目录处理与残留 tmp 清理。独占 `placeholder-key.lock` 目录避免并发覆盖密钥或删除正在写入的 tmp；竞争时 fail closed 后重试。硬杀进程可能留下锁目录，需确认无 hook 正在初始化后删除该残留目录再重发。
 - VM 回归覆盖密钥读取失败、损坏 stdin、各事件错误输出、rename 发布、并发初始化、写入中断及恢复；既有权限、残留 tmp 和旧密钥兼容测试继续通过。
 - 验证：`node test.js`（60 秒 timeout，未超时）、`node test-security.js`、`npm test` 全部通过（ok / office ok / security ok）；`git diff --check` 通过。未提交，保留既有 H1/H2/H3 改动。
 
@@ -239,7 +229,7 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 - M1: content-script to bridge masking now travels over a MessageChannel port (first-port-wins); window.postMessage mask-requests always use the strict bucket and the forgeable `via` field is gone. Test harness uses a fake in-memory channel (real worker_threads ports kept the test process alive).
 - M2: maskFileName only rewrites filenames on explicit PII patterns (email/phone/ID/card); NAME-only detections are rolled back. Generic names in filenames are intentionally not masked; documented in TECHNICAL.
 - M5: unknown-placeholder records cap at 10 attempts, release node references on give-up, and the timer stops when nothing is pending.
-- Misc: PRODUCT roadmap no longer says PrivyAI; TECHNICAL documents spaced Chinese mobile format; legacy placeholder.key copy is atomic via temp file + rename; bridge-timeout toast tells the user to refresh the page after extension update; README Limits notes the hook unmask-before-network-tools prompt-injection risk. No Firefox support claims anywhere (docs say planned only).
+- Misc: PRODUCT roadmap uses the current brand; TECHNICAL documents spaced Chinese mobile format; legacy placeholder.key copy is atomic via temp file + rename; bridge-timeout toast tells the user to refresh the page after extension update; README Limits notes the hook unmask-before-network-tools prompt-injection risk. No Firefox support claims anywhere (docs say planned only).
 - Not changed: plugin id privy-ai (deliberate compat), no CI, N4/M3-remainder/M6-long-tail remain documented limitations.
 - Verification: `npm test` passed (ok / office ok / security ok + hook checks) in ~10s; `git diff --check` clean; manifest/package remain 0.7.0.
 
@@ -257,3 +247,10 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 - M2: Vision compilation failures are cached for five minutes; existing binaries bypass the cache. Denials give the actual marker path, Xcode Command Line Tools installation command and retry steps. Hook command timeout is 180 seconds, exceeding the 120-second compiler timeout. Mock regressions verify cache expiry, manual deletion, binary recovery, repeated image blocking and clean-copy inspection.
 - Docs: current brand and Chinese phone separators corrected; privacy date is 2026-10-06; obsolete prepublish and attribution traces removed. TECHNICAL explains filename NAME rollback and MessagePort.prototype exposure. Listing discloses WebSocket/sendBeacon/Worker fetch gaps; README retains network-tool unmasking risk and corrects non-macOS behavior. Firefox references state planned or unsupported only.
 - Verification: npm test passed (ok / office ok / security ok plus hook checks); git diff --check passed. Office checks are included in test.js; test-office.js does not exist. Vision compilation and OCR regressions used mocks. Existing core/pii.js and core/office.js edits were preserved; no commit or push.
+
+## Pasted image resubmission and aligned label regressions (2026-10-05)
+
+- Successfully redacted pasted originals move into a private quarantine subdirectory with unique filenames. Immediate resubmission scans the redacted copy and passes; a freshly pasted original is scanned and blocked again. OCR/redaction failures leave the original available for retry. Mock hook regressions cover the complete flow and repeated quarantine moves.
+- ADDRESS, DOB, ID and NAME whitespace bounds increase from 20 to 100 characters. Regressions cover 25/50/99-space gaps, ordinary DOB detection, and 10000-space/tab label inputs with a 200ms limit.
+- Removed obsolete temporary checkout paths, local maintenance traces and prior branding notes; retained technical migration and compatibility history.
+- Verification: `npm test` passed (ok / office ok / security ok plus hook checks); `git diff --check` passed. Vision/OCR checks use mocks. Manifest/package remain 0.7.0.

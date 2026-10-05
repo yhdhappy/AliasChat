@@ -116,6 +116,15 @@ for (const label of piiLabels) for (const whitespace of [' ', '\t']) for (const 
   assert(elapsed < 200, `${JSON.stringify(label + punctuation)} with 10000 ${JSON.stringify(whitespace)} characters must finish in under 200ms (took ${elapsed.toFixed(2)}ms)`);
 }
 for (const [text, value, type] of [
+  ...[25, 50, 99].flatMap(gap => [
+    ['DOB:' + ' '.repeat(gap) + '1990-01-02', '1990-01-02', 'DOB'],
+    ['id number:' + ' '.repeat(gap) + 'AB1234567', 'AB1234567', 'ID'],
+    ['Dear' + ' '.repeat(gap) + 'John Smith', 'John Smith', 'NAME'],
+    ['Dr.' + ' '.repeat(gap) + 'John Smith', 'John Smith', 'NAME'],
+    ['first name:' + ' '.repeat(gap) + 'John', 'John', 'NAME'],
+    ['name:' + ' '.repeat(gap) + 'John Smith', 'John Smith', 'NAME'],
+    ['address:' + ' '.repeat(gap) + '42 Example Plaza', '42 Example Plaza', 'ADDRESS']
+  ]),
   ['dob: 1990-01-01', '1990-01-01', 'DOB'],
   ['"dob" : "1990-01-01"', '1990-01-01', 'DOB'],
   ['born 01/02/1990', '01/02/1990', 'DOB'],

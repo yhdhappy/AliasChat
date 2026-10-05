@@ -202,10 +202,21 @@ const visionRegressions = () => {
     assert(retry.reason.includes('personal data found in a pasted image'));
     assert.strictEqual(scans, 2);
     assert(!fs.existsSync(seen));
-    assert.strictEqual(hook.run(input).decision, 'block');
-    assert.strictEqual(scans, 4);
+    assert(!fs.existsSync(image));
+    const quarantine = path.join(scratch, 'images', 'quarantine');
+    const originals = fs.readdirSync(quarantine);
+    assert.strictEqual(originals.length, 1);
+    assert.strictEqual(fs.readFileSync(path.join(quarantine, originals[0]), 'utf8'), 'mock');
+    assert(fs.existsSync(path.join(scratch, 'images', 'paste-redacted.png')));
+    assert.strictEqual(hook.run(input), null);
+    assert.strictEqual(scans, 3);
     assert(!fs.readFileSync(seen, 'utf8').includes(image + '\n'));
-    fs.rmSync(image);
+    fs.copyFileSync(path.join(quarantine, originals[0]), image);
+    const repaste = hook.run(input);
+    assert.strictEqual(repaste.decision, 'block');
+    assert(repaste.reason.includes('personal data found in a pasted image'));
+    assert.strictEqual(scans, 4);
+    assert.strictEqual(fs.readdirSync(quarantine).length, 2);
     assert.strictEqual(hook.run(input), null);
     assert.strictEqual(scans, 4);
     const cleanImage = path.join(scratch, 'images', 'clean.png');
@@ -217,7 +228,7 @@ const visionRegressions = () => {
     assert.strictEqual(clean.run(input), null);
     assert.strictEqual(cleanScans, 1);
   }
-  console.log('hook pasted image OCR/redaction retry and successful seen marking ok (mock)');
+  console.log('hook pasted image failure retry, redacted resubmit and original repaste blocking ok (mock)');
 
   const home = path.join(root, 'legacy-home');
   const legacy = path.join(home, '.claude', 'privyAI');

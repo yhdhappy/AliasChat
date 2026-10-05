@@ -251,6 +251,10 @@ const pastedImages = (id, input, found) => {
     }
     const out = path.join(imgDir, name.replace(/\.(\w+)$/, '-redacted.png'));
     vision('redact', file, out, JSON.stringify(boxes));
+    const quarantine = path.join(imgDir, 'quarantine');
+    ensureDir(quarantine);
+    fs.chmodSync(file, 0o600);
+    fs.renameSync(file, path.join(quarantine, `${crypto.randomBytes(16).toString('hex')}-${name}`));
     Object.assign(found, hits);
     blocked.push({ name, out, count: Object.keys(hits).length });
   }
