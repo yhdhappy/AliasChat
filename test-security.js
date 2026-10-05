@@ -125,7 +125,7 @@ const until = async predicate => {
   }
   throw new Error('Expected asynchronous operation did not complete');
 };
-const extension = (config = {}, sessionStore = {}, failDigests = false) => {
+const extension = (config = {}, sessionStore = {}, failDigests = false, failFirstImport = false) => {
   const listeners = [];
   const messages = [];
   const runtimeRequests = [];
@@ -168,9 +168,16 @@ const extension = (config = {}, sessionStore = {}, failDigests = false) => {
     createTreeWalker: root => { let i = 0; return { nextNode: () => root.children[i++] }; }
   }, MutationObserver: class { constructor(fn) { observer = fn; } observe() {} } });
   let workerListener;
+  let importFailures = failFirstImport ? 1 : 0;
   const session = { get: async key => ({ [key]: sessionStore[key] }), set: async obj => { Object.assign(sessionStore, structuredClone(obj)); }, setAccessLevel: async () => {}, clear: async () => { for (const key of Object.keys(sessionStore)) delete sessionStore[key]; } };
   const restartBackground = () => vm.runInNewContext(fs.readFileSync('extension/background.js', 'utf8'), {
-    crypto: webcrypto, Uint8Array, TextEncoder,
+    crypto: {
+      getRandomValues: webcrypto.getRandomValues.bind(webcrypto),
+      subtle: {
+        importKey: (...args) => importFailures-- > 0 ? Promise.reject(new Error('Temporary key import failure')) : webcrypto.subtle.importKey(...args),
+        sign: (...args) => webcrypto.subtle.sign(...args)
+      }
+    }, Uint8Array, TextEncoder,
     chrome: { storage: { session }, runtime: { id: 'privy-test', onStartup: { addListener() {} }, onInstalled: { addListener: fn => { installedListener = fn; } }, onMessage: { addListener: fn => { workerListener = fn; } } } }
   });
   restartBackground();
@@ -240,6 +247,9 @@ const extension = (config = {}, sessionStore = {}, failDigests = false) => {
   await updateProbe.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact first@example.com' }) });
   assert.strictEqual(updateProbe.sessionStore.privyKey.length, 32, 'An update must save the replacement key to session storage');
   assert.notDeepStrictEqual(updateProbe.sessionStore.privyKey, installedKey, 'An update must rotate the key after clearing session storage');
+  const retryWorker = extension({}, {}, false, true);
+  await assert.rejects(retryWorker.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact retry@example.com' }) }));
+  await retryWorker.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact retry@example.com' }) });
   const ext = extension();
   const body = JSON.stringify({ messages: [{ content: { parts: ['My name is Ali Veli. Ali Veli: jane.doe@example.com'] } }] });
   await ext.page.fetch(url, { method: 'POST', body });

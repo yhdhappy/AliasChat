@@ -16,7 +16,10 @@ const getMaskingKey = () => maskingKey ||= (async () => {
     await chrome.storage.session.set({ privyKey });
   }
   return crypto.subtle.importKey('raw', new Uint8Array(privyKey), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-})();
+})().catch(error => {
+  maskingKey = undefined;
+  throw error;
+});
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id) return;
   (async () => {
