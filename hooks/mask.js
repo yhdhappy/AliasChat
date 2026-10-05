@@ -8,10 +8,14 @@ const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 
 const dir = process.env.CLAUDE_PLUGIN_DATA || path.join(os.homedir(), '.claude', 'privyAI');
+const ensureDir = target => {
+  fs.mkdirSync(target, { recursive: true, mode: 0o700 });
+  fs.chmodSync(target, 0o700);
+};
 let tokenize;
 const mask = (text, found) => {
   if (!tokenize) {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    ensureDir(dir);
     const keyFile = path.join(dir, 'placeholder.key');
     try { fs.writeFileSync(keyFile, crypto.randomBytes(32), { mode: 0o600, flag: 'wx' }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
     for (const name of fs.readdirSync(dir)) if (/^placeholder-.*\.tmp$/.test(name)) fs.rmSync(path.join(dir, name), { force: true });
@@ -25,7 +29,7 @@ const file = id => path.join(dir, `${id}.jsonl`);
 const save = (id, found) => {
   const lines = Object.entries(found).map(([p, v]) => JSON.stringify({ p, v }) + '\n').join('');
   if (!lines) return;
-  fs.mkdirSync(dir, { recursive: true });
+  ensureDir(dir);
   fs.appendFileSync(file(id), lines, { mode: 0o600 });
 };
 const prune = () => {
@@ -52,7 +56,7 @@ const visionBinary = () => {
   const bin = path.join(dir, 'vision');
   try {
     if (!fs.existsSync(bin) || fs.statSync(bin).mtimeMs < fs.statSync(src).mtimeMs) {
-      fs.mkdirSync(dir, { recursive: true });
+      ensureDir(dir);
       execFileSync('swiftc', ['-O', '-o', bin, src], { stdio: 'ignore' });
     }
     return bin;
@@ -72,7 +76,7 @@ const redirectPdf = (id, input, found) => {
   const text = vision('pdf-text', file).replace(/\s+$/, '');
   const content = text.trim() ? mask(text, found) : 'PrivyAI: this PDF has no extractable text, so it was not sent. Ask for it as an image instead.';
   const out = path.join(readsDir(id), `${stem(file)}.txt`);
-  fs.mkdirSync(readsDir(id), { recursive: true });
+  ensureDir(readsDir(id));
   fs.writeFileSync(out, content, { mode: 0o600 });
   const n = Object.keys(found).length;
   return {
@@ -106,7 +110,7 @@ const redirectImage = (id, input, found) => {
   const boxes = imageBoxes(file, found);
   if (!boxes.length) return null;
   const out = path.join(readsDir(id), `${stem(file)}${/\.jpe?g$/i.test(file) ? '.jpg' : '.png'}`);
-  fs.mkdirSync(readsDir(id), { recursive: true });
+  ensureDir(readsDir(id));
   vision('redact', file, out, JSON.stringify(boxes));
   fs.chmodSync(out, 0o600);
   const n = Object.keys(found).length;
@@ -139,7 +143,7 @@ const pastedImages = (id, input, found) => {
   for (const name of fs.readdirSync(imgDir)) {
     const file = path.join(imgDir, name);
     if (!IMAGE.test(name) || /-redacted\./.test(name) || seen.has(file) || Date.now() - fs.statSync(file).mtimeMs > 10 * 60 * 1000) continue;
-    fs.mkdirSync(dir, { recursive: true });
+    ensureDir(dir);
     fs.appendFileSync(seenFile, file + '\n', { mode: 0o600 });
     const hits = {};
     const boxes = imageBoxes(file, hits);
