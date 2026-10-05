@@ -78,6 +78,14 @@ for (const email of ['a+b.c_d%z@example.co.uk', 'A@sub-domain.example.COM']) {
   assert(/^__PII_EMAIL_[0-9a-f]{12}__$/.test(pii.mask(email, values)));
   assert.deepStrictEqual(Object.values(values), [email]);
 }
+const legacyEmailPattern = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
+for (const text of ['alice@x.com-bob@y.com', 'alice@x.com_bob@y.com', 'alice@x.com bob@y.com']) {
+  const expected = [...text.matchAll(legacyEmailPattern)].map(match => match[0].replace(/^[-_]/, ''));
+  const values = {};
+  const masked = pii.mask(text, values);
+  assert.deepStrictEqual(Object.values(values), expected, `${text} should retain every legacy email detection`);
+  for (const email of expected) assert(!masked.includes(email), `${email} leaked from ${text}`);
+}
 for (const text of ['a@example..com', 'a@example.c', 'a@.example.com']) assert.strictEqual(pii.mask(text, {}), text);
 assert(pii.mask('a@example.com123', {}).endsWith('123'));
 
