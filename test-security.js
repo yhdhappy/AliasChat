@@ -134,6 +134,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false) => {
   const shared = { crypto: webcrypto, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, Request, Response, Blob, File, FormData, URLSearchParams, CompressionStream, DecompressionStream, Event, NodeFilter: { SHOW_TEXT: 4 }, clearTimeout, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); return timer; } };
   let observer;
   let bridgeObserver;
+  let bridgeMaskCalls = 0;
   class XHR extends EventTarget {
     constructor() { super(); this.readyState = 0; this.responseType = ''; this.raw = ''; }
     get responseText() { if (this.responseType === 'json') throw new Error('InvalidStateError'); return this.raw; }
@@ -181,8 +182,13 @@ const extension = (config = {}, sessionStore = {}, failDigests = false) => {
     vm.runInContext(fs.readFileSync(file, 'utf8'), page, { filename: file });
     if (page.piiRewrite) pageWindow.piiRewrite = page.piiRewrite;
   }
-  for (const file of manifest.content_scripts[1].js) vm.runInContext(fs.readFileSync(file, 'utf8'), bridge, { filename: file });
-  return { page: pageWindow, requests, messages, toasts, deliver, sessionStore, restartBackground, mutate: muts => bridgeObserver(muts) };
+  for (const file of manifest.content_scripts[1].js) {
+    if (file === 'extension/bridge.js') {
+      bridge.pii.mask = (...args) => { bridgeMaskCalls++; return pii.mask(...args); };
+    }
+    vm.runInContext(fs.readFileSync(file, 'utf8'), bridge, { filename: file });
+  }
+  return { page: pageWindow, requests, messages, toasts, deliver, sessionStore, restartBackground, mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
 };
 
 (async () => {
@@ -217,8 +223,12 @@ const extension = (config = {}, sessionStore = {}, failDigests = false) => {
   await save();
   assert.strictEqual(saves, 1);
 
-  const ext = extension();
+  const cleanExt = extension();
   const url = 'https://chatgpt.com/backend-api/f/conversation';
+  const callsBeforeClean = cleanExt.bridgeMaskCalls;
+  await cleanExt.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'no personal data here' }) });
+  assert.strictEqual(cleanExt.bridgeMaskCalls - callsBeforeClean, 1, 'A clean body should be masked in one pass');
+  const ext = extension();
   const body = JSON.stringify({ messages: [{ content: { parts: ['My name is Ali Veli. Ali Veli: jane.doe@example.com'] } }] });
   await ext.page.fetch(url, { method: 'POST', body });
   const wire = ext.requests[0].init.body;

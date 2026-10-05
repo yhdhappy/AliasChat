@@ -71,7 +71,7 @@
       } else throw new Error('Unsupported masking format');
       return body;
     };
-    await processBody();
+    let body = await processBody();
     const values = [...candidates.keys()];
     if (values.length) {
       const response = await chrome.runtime.sendMessage({ type: 'privy-digests', values });
@@ -81,10 +81,10 @@
         if (!digests.has(value)) throw new Error('Unprepared masking value');
         return digests.get(value);
       };
+      found = Object.create(null);
+      warnings.length = 0;
+      body = await processBody();
     }
-    found = Object.create(null);
-    warnings.length = 0;
-    const body = await processBody();
     const map = await getMap();
     for (const [placeholder, value] of Object.entries(found)) map[placeholder] = value;
     await setMap(map);
