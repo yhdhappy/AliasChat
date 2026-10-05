@@ -197,7 +197,7 @@ If you prefer your own instrument, point `ANTHROPIC_BASE_URL` at a logging proxy
 
 - Detection is pattern based, not a language model. A name in free text with no label, title, cue or matching email nearby is not detected. Labels such as `name:` can also catch values that are not personal.
 - Semantic personal data, for example health conditions, religion, ethnicity or income stated in prose, is not detected.
-- In the browser, intercepted PDF and image file uploads are blocked by default because their contents cannot be inspected. Setting allowOpaqueUploads to true permits them uninspected with a warning. Office and text uploads are masked. Upload masking is verified on claude.ai; ChatGPT web uploads use a two-step flow that has not been verified.
+- In the browser, intercepted PDF and image file uploads are blocked by default because their contents cannot be inspected. Tick "Allow PDF/image uploads" in the extension options (or set allowOpaqueUploads to true) to permit them uninspected with a warning. Office and text uploads are masked. Upload masking is verified on claude.ai; ChatGPT web uploads use a two-step flow that has not been verified.
 - Image redaction relies on OCR. Text the OCR cannot read, handwriting, or personal data that is not text, such as a face, is not redacted.
 - Claude Code hooks cannot rewrite a prompt, only block it, so a prompt containing personal data has to be resent in masked form.
 - The hook restores placeholders to real values before network-capable tools run (`WebFetch`, `curl` via `Bash`). A model steered by prompt injection could use this to exfiltrate personal data; treat tool outputs from untrusted pages accordingly.

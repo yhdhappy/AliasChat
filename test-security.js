@@ -741,7 +741,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   failedXhr.send(body);
   await until(() => failed);
   assert.strictEqual(badConfig.requests.length, 0);
-  const opaqueToast = '🛡 AliasChat: PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them in AliasChat options (allowOpaqueUploads).';
+  const opaqueToast = '🛡 AliasChat: PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them with the "Allow PDF/image uploads" checkbox in AliasChat options.';
   const blockedUpload = extension();
   const pdf = new File(['%PDF-1.7'], 'private.pdf', { type: 'application/pdf' });
   const pdfForm = new FormData();
@@ -773,7 +773,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     assert(allowedUnknown.toasts.some(text => text.includes('uploaded uninspected')));
   }
   assert.strictEqual(unknownUpload.requests.length, 0);
-  assert(unknownUpload.toasts.every(text => text.includes('allowUnknownUploads')));
+  assert(unknownUpload.toasts.every(text => text.includes('Allow unsupported file types')));
   const namedUpload = new FormData();
   namedUpload.append('file', new File(['%PDF-1.7'], 'John_Smith_passport.pdf'));
   await allowedUpload.page.fetch(url, { method: 'POST', body: namedUpload });

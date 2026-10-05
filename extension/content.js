@@ -87,11 +87,11 @@
     if (ms) setTimeout(() => el.remove(), ms);
   };
   const failure = error => show(error?.code === 'opaque-blocked'
-    ? 'PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them in AliasChat options (allowOpaqueUploads).'
+    ? 'PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them with the "Allow PDF/image uploads" checkbox in AliasChat options.'
     : error?.code === 'unknown-blocked'
-      ? 'Unsupported file uploads are blocked because they cannot be inspected. You can allow them in AliasChat options (allowUnknownUploads).'
+      ? 'Unsupported file uploads are blocked because they cannot be inspected. You can allow them with the "Allow unsupported file types" checkbox in AliasChat options.'
       : error?.code === 'encoding-blocked'
-        ? 'File upload blocked because its text encoding could not be decoded safely. You can allow uninspected uploads in AliasChat options (allowUnknownUploads).'
+        ? 'File upload blocked because its text encoding could not be decoded safely. You can allow uninspected uploads in AliasChat options.'
         : error?.code === 'map-storage-error'
           ? error.message
           : error?.message === 'AliasChat bridge did not respond'
