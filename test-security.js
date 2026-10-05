@@ -129,6 +129,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   const listeners = [];
   const messages = [];
   const runtimeRequests = [];
+  const importedExtractable = [];
   const requests = [];
   const toasts = [];
   const shared = { crypto: webcrypto, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, Request, Response, Blob, File, FormData, URLSearchParams, CompressionStream, DecompressionStream, Event, NodeFilter: { SHOW_TEXT: 4 }, clearTimeout, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); return timer; } };
@@ -174,7 +175,10 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     crypto: {
       getRandomValues: webcrypto.getRandomValues.bind(webcrypto),
       subtle: {
-        importKey: (...args) => importFailures-- > 0 ? Promise.reject(new Error('Temporary key import failure')) : webcrypto.subtle.importKey(...args),
+        importKey: (...args) => {
+          importedExtractable.push(args[3]);
+          return importFailures-- > 0 ? Promise.reject(new Error('Temporary key import failure')) : webcrypto.subtle.importKey(...args);
+        },
         sign: (...args) => webcrypto.subtle.sign(...args)
       }
     }, Uint8Array, TextEncoder,
@@ -200,7 +204,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     }
     vm.runInContext(fs.readFileSync(file, 'utf8'), bridge, { filename: file });
   }
-  return { page: pageWindow, requests, messages, runtimeRequests, toasts, deliver, sessionStore, restartBackground, installed: details => installedListener(details), mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
+  return { page: pageWindow, requests, messages, runtimeRequests, importedExtractable, toasts, deliver, sessionStore, restartBackground, installed: details => installedListener(details), mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
 };
 
 (async () => {
@@ -269,6 +273,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   await ext.page.fetch(url, { method: 'POST', body });
   assert.strictEqual(ext.requests[1].init.body, wire);
   assert.strictEqual(ext.sessionStore.privyKey.length, 32);
+  assert(ext.importedExtractable.length && ext.importedExtractable.every(value => value === false), 'HMAC keys must always be imported as non-extractable');
   const expectedEmail = createHmac('sha256', Buffer.from(ext.sessionStore.privyKey)).update('jane.doe@example.com').digest('hex').slice(0, 12);
   assert(wire.includes(`__PII_EMAIL_${expectedEmail}__`));
   assert(!JSON.stringify(ext.messages).includes(JSON.stringify(ext.sessionStore.privyKey)));

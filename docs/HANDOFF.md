@@ -121,3 +121,11 @@ PrivyAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用
 - 四项分别提交前均运行 npm test（node test.js && node test-security.js）通过。未运行 demo/verify-web.js（沙箱 Chromium 启动崩溃）；真实站点抓包仍待 Mac 端补充。版本保持 0.7.0（manifest/package 一致）。
 - 原工作区 .git 只读，提交在 /tmp/privyai-four-fixes 临时克隆中完成；修复文件同步回原工作区。
 - 推送未完成：git push 无法连接沙箱网络代理；已连接 GitHub 的 create_tree 写入被自动审批拒绝（需要审批，但 approval policy 为 never）。四个提交保留在临时克隆，另导出 /tmp/privyai-four-fixes.bundle；可在有写权限及网络的基线仓库 fetch bundle 后 fast-forward main 并 push。
+
+## pi 审查问题修复（2026-10-05）
+
+- 邮箱检测修复相邻邮箱漏检；bridge 无 PII 时复用首趟处理结果；占位符映射经 service worker 代理读写，session storage 保持默认可信上下文访问。
+- 安装/更新时清除 HMAC 密钥缓存；密钥导入失败允许重试；无效长度的 session 密钥重新生成。
+- CLI 密钥文件用 `writeFileSync` 的 `wx` 原子创建，读取并复用已存在密钥，清理残留 `.tmp`；目录创建统一收敛到 `ensureDir` 并设为 `0700`。
+- 补充相邻邮箱、单趟处理、更新轮换、导入重试、密钥长度、临时文件清理、目录权限、HMAC 不可导出及 runtime 消息体密钥隔离测试。`npm test` 通过（ok / office ok / security ok）；manifest/package 版本仍为 0.7.0。
+- 九个单独提交在 `/tmp/privyai-review-fixes`，bundle 在 `/tmp/privyai-review-fixes.bundle`。工作区 `.git` 只读；`git push origin main` 因沙箱代理无法连接失败，GitHub connector 的写入调用被自动审批拒绝（approval policy 为 never），因此尚未推送。
