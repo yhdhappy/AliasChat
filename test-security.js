@@ -233,6 +233,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   let observer;
   let bridgeObserver;
   let bridgeMaskCalls = 0;
+  let openedOptionsPage = 0;
   let installedListener;
   class XHR extends EventTarget {
     constructor() { super(); this.readyState = 0; this.responseType = ''; this.raw = ''; }
@@ -268,7 +269,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   }
   const page = vm.createContext({ ...shared, window: pageWindow, document: {
     documentElement: { appendChild: el => toasts.push(el.textContent) },
-    createElement: () => ({ setAttribute() {}, style: {}, remove() {} }),
+    createElement: () => ({ setAttribute() {}, style: {}, remove() {}, addEventListener() {} }),
     addEventListener() {},
     createTreeWalker: root => { let i = 0; return { nextNode: () => root.children[i++] }; }
   }, MutationObserver: class { constructor(fn) { observer = fn; } observe() {} } });
@@ -290,10 +291,41 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   });
   restartBackground();
   const sendWorker = message => new Promise(resolve => workerListener(structuredClone(message), { id: 'privy-test' }, resolve));
+  let dialogOverlay = null;
+  const fakeDialogElement = () => {
+    const el = {
+      children: [], dataset: {}, style: {}, textContent: '', handlers: {},
+      setAttribute() {},
+      remove() { el.removed = true; },
+      appendChild(child) { el.children.push(child); return child; },
+      addEventListener(type, fn) { el.handlers[type] = fn; },
+      click() { if (el.handlers.click) el.handlers.click({ target: el }); }
+    };
+    return el;
+  };
+  const clickDialogButton = action => {
+    const find = el => {
+      if (el.dataset && el.dataset.action === action) return el;
+      for (const child of el.children || []) {
+        const found = find(child);
+        if (found) return found;
+      }
+      return null;
+    };
+    const button = dialogOverlay && find(dialogOverlay);
+    assert(button, 'dialog button not found: ' + action);
+    button.click();
+  };
   const bridge = vm.createContext({ ...shared, Date: class extends Date { static now() { return now; } }, ...(fakeUnmaskTimers ? { setTimeout: (fn, ms) => { const timer = { fn, at: now + ms }; unmaskTimers.push(timer); return timer; } } : {}), window: bridgeWindow, document: {
     documentElement: {},
-    createTreeWalker: root => { let i = 0; return { nextNode: () => root.children[i++] }; }
-  }, MutationObserver: class { constructor(fn) { bridgeObserver = fn; } observe() {} }, chrome: { runtime: { sendMessage: message => {
+    createTreeWalker: root => { let i = 0; return { nextNode: () => root.children[i++] }; },
+    addEventListener() {},
+    removeEventListener() {},
+    ...(handshake.dialog ? {
+      body: { appendChild: el => { dialogOverlay = el; } },
+      createElement: fakeDialogElement
+    } : {})
+  }, MutationObserver: class { constructor(fn) { bridgeObserver = fn; } observe() {} }, chrome: { runtime: { openOptionsPage: () => { openedOptionsPage++; }, sendMessage: message => {
     runtimeRequests.push(structuredClone(message));
     if (failDigests && message.type === 'privy-digests') return Promise.reject(new Error('Worker unavailable'));
     return sendWorker(message);
@@ -326,7 +358,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     now = end;
     await delay();
   };
-  return { startBridge, advanceHandshake, page: pageWindow, requests, messages, postMessages, runtimeRequests, importedExtractable, toasts, deliver, sessionStore, sendWorker, restartBackground, advanceTime: ms => { now += ms; }, runUnmaskTimers: async () => { for (const timer of unmaskTimers.splice(0)) { if (timer.at <= now) await timer.fn(); else unmaskTimers.push(timer); } }, installed: details => installedListener(details), mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
+  return { startBridge, advanceHandshake, page: pageWindow, requests, messages, postMessages, runtimeRequests, importedExtractable, toasts, deliver, sessionStore, sendWorker, restartBackground, clickDialogButton, get dialogOverlay() { return dialogOverlay; }, get openedOptionsPage() { return openedOptionsPage; }, advanceTime: ms => { now += ms; }, runUnmaskTimers: async () => { for (const timer of unmaskTimers.splice(0)) { if (timer.at <= now) await timer.fn(); else unmaskTimers.push(timer); } }, installed: details => installedListener(details), mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
 };
 
 (async () => {
@@ -741,7 +773,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   failedXhr.send(body);
   await until(() => failed);
   assert.strictEqual(badConfig.requests.length, 0);
-  const opaqueToast = '🛡 AliasChat: PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them with the "Allow PDF/image uploads" checkbox in AliasChat options.';
+  const opaqueToast = '🛡 AliasChat: 已取消上传：这是 AliasChat 拦截的，不是网络问题。点击打开设置。/ Upload cancelled by AliasChat, not a network problem. Click to open settings.';
   const blockedUpload = extension();
   const pdf = new File(['%PDF-1.7'], 'private.pdf', { type: 'application/pdf' });
   const pdfForm = new FormData();
@@ -758,6 +790,45 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   await until(() => imageBlocked);
   assert.strictEqual(blockedUpload.requests.length, 0);
   assert.deepStrictEqual(blockedUpload.toasts, [opaqueToast, opaqueToast]);
+  const dialogText = ext => {
+    const texts = [];
+    const walk = el => {
+      if (el.textContent) texts.push(el.textContent);
+      for (const child of el.children || []) walk(child);
+    };
+    walk(ext.dialogOverlay);
+    return texts.join('\n');
+  };
+  const dialogAllow = extension({}, {}, false, false, false, { dialog: true });
+  const onceForm = new FormData();
+  onceForm.append('file', new File(['%PDF-1.7'], 'once.pdf', { type: 'application/pdf' }));
+  const onceUpload = dialogAllow.page.fetch(url, { method: 'POST', body: onceForm });
+  await until(() => dialogAllow.dialogOverlay);
+  assert(dialogText(dialogAllow).includes('once.pdf'));
+  assert(dialogText(dialogAllow).includes('不是网络问题'));
+  dialogAllow.clickDialogButton('allow');
+  await onceUpload;
+  assert.strictEqual(dialogAllow.requests.length, 1);
+  assert.strictEqual(await dialogAllow.requests[0].init.body.get('file').text(), '%PDF-1.7');
+  assert(dialogAllow.toasts.some(text => text.includes('without masking')));
+  const dialogCancel = extension({}, {}, false, false, false, { dialog: true });
+  const cancelForm = new FormData();
+  cancelForm.append('file', new File(['%PDF-1.7'], 'cancel.pdf', { type: 'application/pdf' }));
+  const cancelUpload = dialogCancel.page.fetch(url, { method: 'POST', body: cancelForm });
+  await until(() => dialogCancel.dialogOverlay);
+  dialogCancel.clickDialogButton('cancel');
+  await assert.rejects(cancelUpload, error => error.code === 'opaque-blocked');
+  assert.strictEqual(dialogCancel.requests.length, 0);
+  assert(dialogCancel.toasts.some(text => text.includes('不是网络问题')));
+  const optExt = extension();
+  const configMsg = optExt.postMessages.find(message => message.data.type === 'mask2ai-config');
+  assert(configMsg && /^[0-9a-f]{64}$/.test(configMsg.data.token));
+  optExt.deliver({ type: 'mask2ai-open-options', token: configMsg.data.token });
+  await delay();
+  assert.strictEqual(optExt.openedOptionsPage, 1);
+  optExt.deliver({ type: 'mask2ai-open-options', token: 'bogus' });
+  await delay();
+  assert.strictEqual(optExt.openedOptionsPage, 1);
   const allowedUpload = extension({ allowOpaqueUploads: true });
   await allowedUpload.page.fetch(url, { method: 'POST', body: pdfForm });
   assert.strictEqual(allowedUpload.requests.length, 1);
@@ -773,7 +844,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     assert(allowedUnknown.toasts.some(text => text.includes('uploaded uninspected')));
   }
   assert.strictEqual(unknownUpload.requests.length, 0);
-  assert(unknownUpload.toasts.every(text => text.includes('Allow unsupported file types')));
+  assert(unknownUpload.toasts.every(text => text.includes('不是网络问题')));
   const namedUpload = new FormData();
   namedUpload.append('file', new File(['%PDF-1.7'], 'John_Smith_passport.pdf'));
   await allowedUpload.page.fetch(url, { method: 'POST', body: namedUpload });
@@ -835,7 +906,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     const invalidEncoding = extension();
     await assert.rejects(invalidEncoding.page.fetch(url, { method: 'POST', body: new File([bytes], 'legacy.csv') }), error => error.code === 'encoding-blocked');
     assert.strictEqual(invalidEncoding.requests.length, 0);
-    assert(invalidEncoding.toasts.some(text => text.includes('encoding could not be decoded safely')));
+    assert(invalidEncoding.toasts.some(text => text.includes('不是网络问题')));
     const allowedEncoding = extension({ allowUnknownUploads: true });
     await allowedEncoding.page.fetch(url, { method: 'POST', body: new File([bytes], 'legacy.csv') });
     assert.deepStrictEqual(new Uint8Array(await allowedEncoding.requests[0].init.body.arrayBuffer()), bytes);

@@ -45,6 +45,84 @@
   const sendConfig = () => window.postMessage({ type: 'mask2ai-config', token }, location.origin);
   const unpackFile = file => new File([file.bytes], file.name, { type: file.type, lastModified: file.lastModified });
   const packFile = async file => ({ bytes: await file.arrayBuffer(), name: file.name, type: file.type, lastModified: file.lastModified });
+  const BLOCK_CODES = ['opaque-blocked', 'unknown-blocked', 'encoding-blocked'];
+  const BLOCK_TEXT = {
+    'opaque-blocked': {
+      zh: '浏览器无法检查图片 / PDF 文件里的内容，其中可能藏有个人信息（比如证件、手机号截图）。',
+      en: 'The browser cannot inspect images or PDFs, which may contain personal data.'
+    },
+    'unknown-blocked': {
+      zh: '这种文件浏览器无法检查内容，其中可能藏有个人信息。',
+      en: 'This file type cannot be inspected in the browser and may contain personal data.'
+    },
+    'encoding-blocked': {
+      zh: '这个文本文件的编码无法安全识别，里面的内容可能无法正确检查。',
+      en: 'This text file\u2019s encoding cannot be decoded safely, so its contents cannot be inspected.'
+    }
+  };
+  const confirmUpload = (fileName, code) => new Promise(resolve => {
+    let settled = false;
+    let overlay;
+    let timer;
+    const finish = ok => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { document.removeEventListener('keydown', onKey); } catch {}
+      try { overlay.remove(); } catch {}
+      resolve(ok);
+    };
+    const onKey = e => { if (e.key === 'Escape') finish(false); };
+    try {
+      if (typeof document.createElement !== 'function' || !document.body || typeof document.body.appendChild !== 'function') return finish(false);
+      const text = BLOCK_TEXT[code] || BLOCK_TEXT['opaque-blocked'];
+      overlay = document.createElement('div');
+      overlay.setAttribute('data-mask2ai', '');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;';
+      const box = document.createElement('div');
+      box.style.cssText = 'background:#fff;color:#1c1b18;border-radius:12px;padding:22px 24px;max-width:27rem;margin:16px;box-shadow:0 12px 40px rgba(0,0,0,.4);';
+      const title = document.createElement('div');
+      title.style.cssText = 'font-size:16px;font-weight:700;margin-bottom:8px;';
+      title.textContent = '🛡 AliasChat 已拦截此次上传 · Upload blocked';
+      const body = document.createElement('div');
+      body.style.cssText = 'color:#444;margin-bottom:4px;';
+      body.textContent = text.zh + '这次上传已被拦下——不是网络问题，无需检查网络。 ' + text.en + ' This upload was blocked to protect you; it is not a network problem.';
+      const name = document.createElement('div');
+      name.style.cssText = 'font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#777;margin:8px 0 16px;word-break:break-all;';
+      name.textContent = fileName;
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;';
+      const mkButton = (label, primary, action) => {
+        const button = document.createElement('button');
+        button.textContent = label;
+        button.dataset.action = action;
+        button.style.cssText = primary
+          ? 'border:none;border-radius:8px;background:#6b21a8;color:#fff;padding:9px 18px;font:inherit;cursor:pointer;'
+          : 'border:1px solid #ccc;border-radius:8px;background:#fff;color:#333;padding:9px 18px;font:inherit;cursor:pointer;';
+        button.addEventListener('click', () => finish(action === 'allow'));
+        return button;
+      };
+      row.appendChild(mkButton('取消 · Cancel', false, 'cancel'));
+      row.appendChild(mkButton('这次仍要上传 · Upload once', true, 'allow'));
+      const link = document.createElement('button');
+      link.textContent = '在设置中改为全部放行 · Allow all in options →';
+      link.style.cssText = 'border:none;background:none;color:#6b21a8;padding:0;margin-top:14px;font:13px/1.5 system-ui,sans-serif;cursor:pointer;text-decoration:underline;';
+      link.addEventListener('click', () => {
+        try { chrome.runtime.openOptionsPage(); } catch {}
+        finish(false);
+      });
+      box.appendChild(title);
+      box.appendChild(body);
+      box.appendChild(name);
+      box.appendChild(row);
+      box.appendChild(link);
+      overlay.appendChild(box);
+      overlay.addEventListener('click', e => { if (e.target === overlay) finish(false); });
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(overlay);
+      timer = setTimeout(() => finish(false), 120000);
+    } catch { finish(false); }
+  });
   const run = async data => {
     await ready;
     let found = Object.create(null);
@@ -55,8 +133,17 @@
     };
     const maskText = (text, values) => mask(text, values, tokenize);
     const warnings = [];
+    const allowedOnce = new Set();
     const file = async value => {
-      return packFile(await maskFile(unpackFile(value), maskText, found, warning => warnings.push(warning), userConfig));
+      try {
+        return packFile(await maskFile(unpackFile(value), maskText, found, warning => warnings.push(warning), userConfig));
+      } catch (error) {
+        if (!BLOCK_CODES.includes(error.code)) throw error;
+        if (!allowedOnce.has(value) && !(await confirmUpload(value.name, error.code))) throw error;
+        allowedOnce.add(value);
+        warnings.push(value.name + ' was uploaded without masking: the browser cannot inspect this file type');
+        return value;
+      }
     };
     const processBody = async () => {
       let body;
@@ -118,6 +205,10 @@
       }
       if (contentPort) contentPort.postMessage({ type: 'mask2ai-port-ack', token });
       return sendConfig();
+    }
+    if (data.type === 'mask2ai-open-options' && data.token === token) {
+      try { chrome.runtime.openOptionsPage(); } catch {}
+      return;
     }
     handleMaskRequest(data, pageBucket);
   });

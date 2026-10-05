@@ -23,11 +23,13 @@ Before a message leaves claude.ai or chatgpt.com, the extension finds email addr
 - The placeholder map is stored in the browser's session storage (cleared when the browser closes) and is never sent anywhere.
 - Open source, MIT: https://github.com/yhdhappy/AliasChat
 
+Images and PDFs: the browser cannot inspect their contents, so these uploads are blocked by default. Each time you upload one, AliasChat asks whether to upload just that file; you can also allow them all in the extension options.
+
 Not affiliated with OpenAI or Anthropic.
 
 ## Limitations
 
-Detection is pattern based. It replaces the personal data it detects, but it cannot guarantee all personal data is caught. A bare name in free text with no title, label or matching email nearby is not detected. PDF and image uploads are blocked by default because their contents cannot be inspected in the browser (you can allow them in the options). Requests sent over WebSocket, navigator.sendBeacon, or fetch inside a Worker are not intercepted or masked. Full list of what is and is not caught: https://github.com/yhdhappy/AliasChat
+Detection is pattern based. It replaces the personal data it detects, but it cannot guarantee all personal data is caught. A bare name in free text with no title, label or matching email nearby is not detected. PDF and image uploads are blocked by default because their contents cannot be inspected in the browser (each upload asks for confirmation, or you can allow them in the options). Requests sent over WebSocket, navigator.sendBeacon, or fetch inside a Worker are not intercepted or masked. Full list of what is and is not caught: https://github.com/yhdhappy/AliasChat
 
 ## Single purpose
 

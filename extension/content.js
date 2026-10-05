@@ -62,12 +62,12 @@
     }, 500);
   };
   offerPort();
-  const rpc = (type, payload) => new Promise((resolve, reject) => {
+  const rpc = (type, payload, timeoutMs = 10000) => new Promise((resolve, reject) => {
     const id = requestPrefix + ':' + ++sequence;
     const timer = setTimeout(() => {
       pending.delete(id);
       reject(new Error('AliasChat bridge did not respond'));
-    }, 10000);
+    }, timeoutMs);
     pending.set(id, { resolve, reject, timer, type: type.replace('-request', '-result') });
     Promise.all([ready, transportReady]).then(() => {
       if (!pending.has(id)) return;
@@ -78,25 +78,27 @@
   });
 
   const style = 'position:fixed;z-index:2147483647;font:13px/1.4 system-ui,sans-serif;color:#fff;background:#6b21a8;border-radius:8px;padding:6px 10px;box-shadow:0 2px 8px rgba(0,0,0,.3);pointer-events:none;';
-  const show = (text, ms) => {
+  const show = (text, ms, onClick) => {
     const el = document.createElement('div');
     el.setAttribute('data-mask2ai', '');
-    el.style.cssText = style + 'right:16px;bottom:16px;';
+    el.style.cssText = style + 'right:16px;bottom:16px;' + (onClick ? 'pointer-events:auto;cursor:pointer;' : '');
     el.textContent = '🛡 AliasChat: ' + text;
+    if (onClick) el.addEventListener('click', () => { try { onClick(); } finally { el.remove(); } });
     (document.body || document.documentElement).appendChild(el);
     if (ms) setTimeout(() => el.remove(), ms);
   };
-  const failure = error => show(error?.code === 'opaque-blocked'
-    ? 'PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them with the "Allow PDF/image uploads" checkbox in AliasChat options.'
-    : error?.code === 'unknown-blocked'
-      ? 'Unsupported file uploads are blocked because they cannot be inspected. You can allow them with the "Allow unsupported file types" checkbox in AliasChat options.'
-      : error?.code === 'encoding-blocked'
-        ? 'File upload blocked because its text encoding could not be decoded safely. You can allow uninspected uploads in AliasChat options.'
-        : error?.code === 'map-storage-error'
-          ? error.message
-          : error?.message === 'AliasChat bridge did not respond'
-            ? 'AliasChat was updated; please refresh this page to keep masking active'
-            : 'could not mask personal data; request blocked', 6000);
+  const openOptions = () => window.postMessage({ type: 'mask2ai-open-options', token }, location.origin);
+  const failure = error => {
+    if (error && ['opaque-blocked', 'unknown-blocked', 'encoding-blocked'].includes(error.code)) {
+      show('已取消上传：这是 AliasChat 拦截的，不是网络问题。点击打开设置。/ Upload cancelled by AliasChat, not a network problem. Click to open settings.', 12000, openOptions);
+      return;
+    }
+    show(error?.code === 'map-storage-error'
+      ? error.message
+      : error?.message === 'AliasChat bridge did not respond'
+        ? 'AliasChat was updated; please refresh this page to keep masking active'
+        : 'could not mask personal data; request blocked', 6000);
+  };
   document.addEventListener('DOMContentLoaded', () => show('on, personal data is masked before sending', 4000));
 
   const gunzip = bytes => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
@@ -134,7 +136,7 @@
       } else throw new Error('Unsupported chat request body');
     }
     if (!payload) return body;
-    const result = await rpc('mask-request', payload);
+    const result = await rpc('mask-request', payload, payload.format === 'chat' ? 10000 : 125000);
     for (const name of result.warnings) show(name, 6000);
     if (result.count) show(`masked ${result.count} value${result.count === 1 ? '' : 's'} before sending`, 4000);
     return restore(result.body);

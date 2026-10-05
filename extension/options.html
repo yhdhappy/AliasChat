@@ -19,7 +19,7 @@ code { background: #f1efe8; padding: 0 4px; border-radius: 3px; }
 <h1>AliasChat configuration</h1>
 <p>Use the checkboxes for upload permissions. Advanced: one JSON object with <code>disable</code> switching detector types off, <code>extra</code> adding your own patterns, <code>allow</code> listing exact values never to mask. Leave it empty to use the default protections. Types: EMAIL, IBAN, CARD, CARD_CN, SSN, PHONE, PHONE_CN, ID_CN, ADDRESS, DOB, ID, IP, NAME.</p>
 <div class="row"><label><input type="checkbox" id="allowOpaqueUploads"> Allow PDF/image uploads <span class="hint">(their contents cannot be masked in the browser; blocked by default)</span></label></div>
-<div class="row"><label><input type="checkbox" id="allowUnknownUploads"> Allow unsupported file types <span class="hint">(they cannot be inspected; blocked by default)</span></label></div>
+<div class="row"><label><input type="checkbox" id="allowUnknownUploads"> Allow unsupported file types <span class="hint">(includes text files whose encoding cannot be decoded safely; blocked by default)</span></label></div>
 <textarea id="config" spellcheck="false" placeholder='{
   "disable": ["SSN"],
   "extra": [{ "type": "EMPLOYEE_ID", "pattern": "EMP-\\d{6}" }],
