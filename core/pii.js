@@ -47,7 +47,7 @@
   const addressLike = s => !/__PII_/.test(s) && /\d/.test(s) && /\p{L}{3}/u.test(s) && !/^(?:0x|\d+\.\d+\.\d+\.\d+)/i.test(s);
 
   const PATTERNS = [
-    ['EMAIL', /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g],
+    ['EMAIL', /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g],
     ['IBAN', /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/g, iban],
     ['PHONE_CN', /\b1[3-9]\d{9}\b/g],
     ['ID_CN', /\b[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b/g, chineseId],
@@ -83,14 +83,31 @@
   const PLACEHOLDER = /__PII_[A-Z_]+_(?:[0-9a-f]{12}|[0-9a-f]{6})__/g;
   const hasPlaceholder = s => /__PII_[A-Z_]+_(?:[0-9a-f]{12}|[0-9a-f]{6})__/.test(s);
 
+  const emailPrefix = candidate => {
+    const start = candidate.indexOf('@') + 1;
+    const labels = candidate.slice(start).split('.');
+    if (!/^[A-Za-z0-9-]+$/.test(labels[0])) return '';
+    let offset = start + labels[0].length;
+    let end = 0;
+    for (const label of labels.slice(1)) {
+      offset++;
+      const tld = /^[A-Za-z]{2,}/.exec(label);
+      if (tld) end = offset + tld[0].length;
+      if (!/^[A-Za-z0-9-]+$/.test(label)) break;
+      offset += label.length;
+    }
+    return candidate.slice(0, end);
+  };
+
   const apply = (text, type, re, check, found, salt) => text.replace(re, (...args) => {
-    const m = args[0];
+    const m = type === 'EMAIL' ? emailPrefix(args[0]) : args[0];
+    if (!m) return args[0];
     const val = typeof args[1] === 'string' ? args[1] : m;
     if (check && !check(val)) return m;
     if (config.allow.has(val)) return m;
     const p = `__PII_${type}_${hash(salt ? salt + '\0' + val : val)}__`;
     found[p] = val;
-    return m.replace(val, p);
+    return args[0].replace(val, p);
   });
 
   const namesFromEmails = (found, text) => Object.entries(found)

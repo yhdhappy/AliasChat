@@ -68,6 +68,19 @@ pii.configure({ disable: ['PHONE_CN', 'ID_CN', 'CARD_CN', 'CARD'] });
 assert.strictEqual(pii.mask(chinese, {}), chinese);
 pii.configure({});
 
+for (const text of ['a'.repeat(40000), 'a@' + 'a.'.repeat(20000) + '1', 'a@' + 'a'.repeat(40000)]) {
+  const start = performance.now();
+  assert.strictEqual(pii.mask(text, {}), text);
+  assert(performance.now() - start < 200, 'Long non-email text must be processed in under 200ms');
+}
+for (const email of ['a+b.c_d%z@example.co.uk', 'A@sub-domain.example.COM']) {
+  const values = {};
+  assert(/^__PII_EMAIL_[0-9a-f]{12}__$/.test(pii.mask(email, values)));
+  assert.deepStrictEqual(Object.values(values), [email]);
+}
+for (const text of ['a@example..com', 'a@example.c', 'a@.example.com']) assert.strictEqual(pii.mask(text, {}), text);
+assert(pii.mask('a@example.com123', {}).endsWith('123'));
+
 const salted = {};
 const first = pii.mask('jane.doe@example.com', salted, 'first-session');
 assert(/^__PII_EMAIL_[0-9a-f]{12}__$/.test(first));

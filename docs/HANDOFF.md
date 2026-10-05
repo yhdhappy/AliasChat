@@ -110,3 +110,7 @@ PrivyAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用
 - NAME_STOPLIST 仅保留指定的 11 个常见词；新增去重、姓氏重复遮蔽、上传拦截和实际 zip 内容回归检查。
 - 验证：`npm test` 输出 ok / office ok / security ok；随后 `node test-security.js` 输出 security ok。未运行 `demo/verify-web.js`，由 Mac 上的真实 Chrome 补跑。
 - 沙箱 `.git` 只读，提交因 index.lock 创建失败而未执行，未 push；六项独立补丁和外部提交脚本保存在 `/tmp/privyai-prepublish/`，等待外部以 Muse <muse@local> 逐项提交后统一 push。
+
+## 四项复现问题修复（2026-10-05）
+
+- 邮箱检测改为带起始边界的线性候选扫描及域名逐段校验；新增 4 万字符、长域名和多段无效域名的 200ms 回归限制。
