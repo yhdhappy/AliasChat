@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/github/license/yhdhappy/privyAI?style=flat-square)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/yhdhappy/privyAI?style=flat-square)](https://github.com/yhdhappy/privyAI/stargazers)
 
-Protects your privacy when you use AI. PrivyAI keeps personal data on your machine when you work with an AI assistant. It detects names, contact details, identity numbers, payment details and addresses in what you send, replaces them with placeholders before anything leaves your device, and puts the real values back on your screen.
+Protects your privacy when you use AI. PrivyAI replaces the personal data it detects when you work with an AI assistant. It detects names, contact details, identity numbers, payment details and addresses in what you send, replaces detected values with placeholders in supported outgoing messages, and puts the real values back on your screen.
 
 Project and docs: [github.com/yhdhappy/privyAI](https://github.com/yhdhappy/privyAI)
 
@@ -66,8 +66,8 @@ Detection is pattern based. Structured identifiers are matched reliably. Names a
 | --- | --- | --- |
 | Text: .txt, .md, .csv, .json, .xml, .html, .yaml, .log, source code | masked in tool output | masked when uploaded |
 | Office: .docx, .xlsx, .pptx | Claude reads these through scripts, whose text output is masked | masked in place when uploaded: the XML text inside the zip is rewritten, formatting and images untouched |
-| PDF | the Read is redirected to a masked text extraction (PDFKit); the raw PDF is never read by the model. A PDF with no extractable text is withheld | uploaded uninspected, a toast says so |
-| Image: .png, .jpg, .gif, .webp | the Read is redirected to a copy where the words that match, found by Apple Vision OCR, are blacked out in the pixels | uploaded uninspected, a toast says so |
+| PDF | the Read is redirected to a masked text extraction (PDFKit); the raw PDF is never read by the model. A PDF with no extractable text is withheld | intercepted file uploads are blocked by default; allowOpaqueUploads permits them uninspected with a warning |
+| Image: .png, .jpg, .gif, .webp | the Read is redirected to a copy where the words that match, found by Apple Vision OCR, are blacked out in the pixels | intercepted file uploads are blocked by default; allowOpaqueUploads permits them uninspected with a warning |
 | Image pasted into the prompt | the prompt is blocked when OCR finds personal data in it; a redacted copy is written next to the original and named in the message, attach that instead | not inspected |
 
 PDF and image handling in Claude Code needs macOS with the Swift toolchain (`xcode-select --install`); the helper in `hooks/vision.swift` is compiled once into the plugin data directory on first use. On other systems PDFs and images pass through with a warning.
@@ -83,7 +83,7 @@ flowchart LR
     Model -->|tool call with placeholders| Pre{PreToolUse<br/>hook}
     Pre -->|placeholders restored| Tool[Read / Bash / Edit / MCP]
     Tool -->|real output| Post{PostToolUse<br/>hook}
-    Post -->|placeholders only| Model
+    Post -->|detected data replaced| Model
     Model -->|reply with placeholders| Disp{MessageDisplay<br/>hook}
     Disp -->|real values on screen| You
     Map[(placeholder map<br/>local, 0600, per session)] <-.-> Pre
@@ -92,7 +92,7 @@ flowchart LR
     Map <-.-> UPS
 ```
 
-Everything left of the API runs on your machine. The API only receives placeholders. In the browser the same detection runs inside the page: the outgoing chat request is rewritten before it is sent, and placeholders in the rendered page are swapped back to the real values.
+Everything left of the API runs on your machine. PrivyAI replaces the personal data it detects in supported requests; undetected values can still reach the API. In the browser detection runs in the extension's isolated world: the outgoing chat request is rewritten before it is sent, and placeholders in the rendered page are swapped back to the real values.
 
 ## Install
 
@@ -145,7 +145,7 @@ Expected: a toast "PrivyAI: masked 3 values before sending" appears bottom right
 **In Chrome**
 
 - A toast reports how many values were masked each time you send a message.
-- The assistant replies with placeholders; the page shows the real values. The placeholder map stays in the extension's isolated world and is discarded when the page reloads or the tab closes.
+- The assistant replies with placeholders; the page shows the real values. The placeholder map is kept in chrome.storage.session, survives page reloads and tab closures, and is cleared when the browser session ends or the extension reloads/updates. Page scripts cannot directly access this extension storage, but they can read real values restored into the page DOM.
 
 ## Configuration
 
@@ -195,10 +195,10 @@ If you prefer your own instrument, point `ANTHROPIC_BASE_URL` at a logging proxy
 
 - Detection is pattern based, not a language model. A name in free text with no label, title, cue or matching email nearby is not detected. Labels such as `name:` can also catch values that are not personal.
 - Semantic personal data, for example health conditions, religion, ethnicity or income stated in prose, is not detected.
-- In the browser, PDF and image uploads are not inspected; a toast says so. Office and text uploads are masked. Upload masking is verified on claude.ai; ChatGPT web uploads use a two-step flow that has not been verified.
+- In the browser, intercepted PDF and image file uploads are blocked by default because their contents cannot be inspected. Setting allowOpaqueUploads to true permits them uninspected with a warning. Office and text uploads are masked. Upload masking is verified on claude.ai; ChatGPT web uploads use a two-step flow that has not been verified.
 - Image redaction relies on OCR. Text the OCR cannot read, handwriting, or personal data that is not text, such as a face, is not redacted.
 - Claude Code hooks cannot rewrite a prompt, only block it, so a prompt containing personal data has to be resent in masked form.
-- The Chrome extension rewrites requests made through the page's `fetch`. It has been verified against the current claude.ai and chatgpt.com request formats, JSON and form-encoded, plain and gzip-compressed. A change in either site's client may require an update.
+- The Chrome extension rewrites supported requests made through the page's `fetch` and asynchronous `XMLHttpRequest`. Unit tests cover JSON and form-encoded, plain and gzip-compressed bodies. Editing, retrying, regenerating and title requests still need real UI captures; see [request coverage and capture steps](docs/REQUEST-COVERAGE.md). A change in either site's client may require an update.
 
 ## Technical details
 
@@ -215,11 +215,11 @@ If you prefer your own instrument, point `ANTHROPIC_BASE_URL` at a logging proxy
 
 **Detection is an ordered pattern list** in `core/pii.js`. Each entry is a type, a regular expression and an optional validator. Emails run first so their digits are not later read as phones; cards and IBANs run before phones for the same reason. Label, title and cue patterns capture only the value, and a shape check rejects values such as `name: PrivyAI` or `address: 0x7fff`. Generic labels such as `name:` or `owner:` only match two or more capitalised words, so `"name": "Bash"` in JSON or `owner: Docker` in config files is left alone; `firstName:` and `surname:` still take a single word. After the static pass, the local part of every masked email is split into tokens, and each token is masked where it appears capitalised or in capitals, which is how `jane.doe@` also hides `Jane` and `DOE` in a CSV column.
 
-**Placeholders are content-addressed.** A value becomes `__PII_<TYPE>_<12 hex digits of a hash of the value>__`. The same value yields the same placeholder in a prompt, a file read and a grep result without a lookup, hooks running in parallel cannot disagree, and after a resume a single re-read rebuilds the map. Underscores keep the token a single word for the model and harmless inside code.
+**Placeholders use a private key.** A value becomes `__PII_<TYPE>_<12 hex digits of HMAC-SHA-256>__`. Hooks use a random 256-bit key in a local file created with mode `0600`; the same key keeps placeholders stable across hook processes and resumed sessions. Standalone Node calls use a random process key unless a private tokenizer is supplied. The extension generates its key in the background service worker and keeps it in chrome.storage.session; the key never goes through page messages. Old six-digit and twelve-digit placeholders can still be restored from their maps. Underscores keep the token a single word for the model and harmless inside code.
 
 **The map is a local append-only file.** Placeholder to value pairs are appended as JSON lines to `$CLAUDE_PLUGIN_DATA/<session_id>.jsonl`, created with mode `0600`. Small appends are atomic on POSIX, so parallel tool calls never lose an entry. Maps are kept for 30 days so resumed sessions can still restore, then pruned.
 
-**The extension** (`manifest.json`, `extension/`) wraps `window.fetch` and asynchronous `XMLHttpRequest` at `document_start`. The detection core and placeholder map live in `bridge.js` in the extension's isolated world; the page wrapper requests masking and restoration through a token-bearing `postMessage` protocol. A random salt generated by the page wrapper makes placeholders differ between page loads. Only the first config handshake is accepted; page scripts can still observe the token, preempt that handshake or forge operation messages, so this protocol is not an authentication boundary. For requests to the chat endpoints it decodes the body, whether a JSON string, a form body, a byte array or a gzip-compressed byte array, masks the text fields (`prompt`, `parts`, `extracted_content`, `text`, `content`), re-encodes it in the original form and forwards it. A `MutationObserver` restores placeholders in rendered text, skipping editable fields. XHR text and JSON responses are restored before completion events reach listeners. Masking errors block the request and show a PrivyAI toast; restoration errors leave placeholders intact. Custom regex patterns are checked in a terminable worker against 2000-character stress inputs with a 100ms limit before saving. This timing check cannot prove a pattern safe for every possible input.
+**The extension** (`manifest.json`, `extension/`) wraps `window.fetch` and asynchronous `XMLHttpRequest` at `document_start`. The detection core runs with `bridge.js` in the extension's isolated world, and the placeholder map is stored in chrome.storage.session. The page wrapper requests masking through a token-bearing `postMessage` protocol; there is no page-callable restoration interface. The bridge obtains keyed digests through extension runtime messages to the background service worker. Only the first config handshake is accepted; page scripts can still observe the token, preempt that handshake or forge operation messages, so this protocol is not an authentication boundary. For requests to the chat endpoints it decodes the body, whether a JSON string, a form body, a byte array or a gzip-compressed byte array, masks the text fields (`prompt`, `parts`, `extracted_content`, `text`, `content`), re-encodes it in the original form and forwards it. A `MutationObserver` in the isolated world restores placeholders in rendered text, skipping editable fields. XHR responses retain placeholders. Isolation protects the stored map and key, but website scripts can read real values after they are restored into the DOM. Masking errors block the request and show a PrivyAI toast; restoration errors leave placeholders intact. Custom regex patterns are checked in a terminable worker against 2000-character stress inputs with a 100ms limit before saving. This timing check cannot prove a pattern safe for every possible input.
 
 **What still leaves the machine.** Placeholders, everything the patterns do not recognise, file paths, and your prompt once you resend it in masked form.
 
@@ -256,7 +256,7 @@ The project repository is [github.com/yhdhappy/privyAI](https://github.com/yhdha
 
 ## Continuing the work
 
-`AGENTS.md` holds the working rules and the owner's release words; `HANDOFF.md` carries the context another person or agent needs to pick this up: repositories, verification commands, recording tricks, conventions and open work.
+`AGENTS.md` holds the working rules and the owner's release words; `docs/HANDOFF.md` carries the context another person or agent needs to pick this up: repositories, verification commands, recording tricks, conventions and open work.
 
 ## License
 

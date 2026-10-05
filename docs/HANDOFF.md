@@ -117,3 +117,7 @@ PrivyAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用
 - 占位符改为 HMAC-SHA-256 的十二位摘要：SW 生成随机 256 位密钥并存 session storage，只通过扩展内部消息返回摘要；MAIN world 不接收密钥或盐。bridge 先收集检测值，再生成最终请求；旧六位及十二位占位符仍能还原。
 - Node 默认使用进程内随机密钥；hooks（包括 demo 驱动的 CLI）使用原子发布的 0600 本地密钥文件，保持跨进程和恢复会话的占位符稳定。DOM 还原仍仅在 bridge observer 中执行。
 - 请求覆盖核查：历史交接明确将 retry_completion 留给真账号抓包，当前无相关固件；title 和 message_content 的真实请求结构仍待确认。规则合成探针及 Mac 编辑/重试/重新生成/标题抓包步骤见 docs/REQUEST-COVERAGE.md；未猜测或扩大运行时白名单。
+- README 按实际代码修正默认 PDF/图片拦截、session 映射生命周期、检测范围承诺、保密 HMAC 密钥、单向遮蔽消息与 isolated DOM 还原；明确网站脚本可读取恢复后的 DOM 真值。
+- 四项分别提交前均运行 npm test（node test.js && node test-security.js）通过。未运行 demo/verify-web.js（沙箱 Chromium 启动崩溃）；真实站点抓包仍待 Mac 端补充。版本保持 0.7.0（manifest/package 一致）。
+- 原工作区 .git 只读，提交在 /tmp/privyai-four-fixes 临时克隆中完成；修复文件同步回原工作区。
+- 推送未完成：git push 无法连接沙箱网络代理；已连接 GitHub 的 create_tree 写入被自动审批拒绝（需要审批，但 approval policy 为 never）。四个提交保留在临时克隆，另导出 /tmp/privyai-four-fixes.bundle；可在有写权限及网络的基线仓库 fetch bundle 后 fast-forward main 并 push。
