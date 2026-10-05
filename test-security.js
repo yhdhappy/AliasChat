@@ -135,6 +135,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false) => {
   let observer;
   let bridgeObserver;
   let bridgeMaskCalls = 0;
+  let installedListener;
   class XHR extends EventTarget {
     constructor() { super(); this.readyState = 0; this.responseType = ''; this.raw = ''; }
     get responseText() { if (this.responseType === 'json') throw new Error('InvalidStateError'); return this.raw; }
@@ -170,7 +171,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false) => {
   const session = { get: async key => ({ [key]: sessionStore[key] }), set: async obj => { Object.assign(sessionStore, structuredClone(obj)); }, setAccessLevel: async () => {}, clear: async () => { for (const key of Object.keys(sessionStore)) delete sessionStore[key]; } };
   const restartBackground = () => vm.runInNewContext(fs.readFileSync('extension/background.js', 'utf8'), {
     crypto: webcrypto, Uint8Array, TextEncoder,
-    chrome: { storage: { session }, runtime: { id: 'privy-test', onStartup: { addListener() {} }, onInstalled: { addListener() {} }, onMessage: { addListener: fn => { workerListener = fn; } } } }
+    chrome: { storage: { session }, runtime: { id: 'privy-test', onStartup: { addListener() {} }, onInstalled: { addListener: fn => { installedListener = fn; } }, onMessage: { addListener: fn => { workerListener = fn; } } } }
   });
   restartBackground();
   const bridge = vm.createContext({ ...shared, window: bridgeWindow, document: {
@@ -192,7 +193,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false) => {
     }
     vm.runInContext(fs.readFileSync(file, 'utf8'), bridge, { filename: file });
   }
-  return { page: pageWindow, requests, messages, runtimeRequests, toasts, deliver, sessionStore, restartBackground, mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
+  return { page: pageWindow, requests, messages, runtimeRequests, toasts, deliver, sessionStore, restartBackground, installed: details => installedListener(details), mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
 };
 
 (async () => {
@@ -232,6 +233,13 @@ const extension = (config = {}, sessionStore = {}, failDigests = false) => {
   const callsBeforeClean = cleanExt.bridgeMaskCalls;
   await cleanExt.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'no personal data here' }) });
   assert.strictEqual(cleanExt.bridgeMaskCalls - callsBeforeClean, 1, 'A clean body should be masked in one pass');
+  const updateProbe = extension();
+  await updateProbe.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact first@example.com' }) });
+  const installedKey = [...updateProbe.sessionStore.privyKey];
+  await updateProbe.installed({ reason: 'update' });
+  await updateProbe.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact first@example.com' }) });
+  assert.strictEqual(updateProbe.sessionStore.privyKey.length, 32, 'An update must save the replacement key to session storage');
+  assert.notDeepStrictEqual(updateProbe.sessionStore.privyKey, installedKey, 'An update must rotate the key after clearing session storage');
   const ext = extension();
   const body = JSON.stringify({ messages: [{ content: { parts: ['My name is Ali Veli. Ali Veli: jane.doe@example.com'] } }] });
   await ext.page.fetch(url, { method: 'POST', body });

@@ -1,6 +1,7 @@
 (() => {
   chrome.runtime.onInstalled.addListener(details => {
     chrome.storage.session.clear();
+    maskingKey = undefined;
     if (details.reason === 'install') {
       chrome.tabs.create({ url: chrome.runtime.getURL('extension/welcome.html') });
     }
