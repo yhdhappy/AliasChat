@@ -137,7 +137,7 @@ const until = async predicate => {
   }
   throw new Error('Expected asynchronous operation did not complete');
 };
-const extension = (config = {}, sessionStore = {}, failDigests = false, failFirstImport = false) => {
+const extension = (config = {}, sessionStore = {}, failDigests = false, failFirstImport = false, fakeUnmaskTimers = false) => {
   const listeners = [];
   const messages = [];
   const postMessages = [];
@@ -146,6 +146,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   const requests = [];
   const toasts = [];
   let now = 0;
+  const unmaskTimers = [];
   const shared = { location: { origin: 'https://chatgpt.com' }, performance: { now: () => now }, crypto: webcrypto, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, Request, Response, Blob, File, FormData, URLSearchParams, CompressionStream, DecompressionStream, Event, NodeFilter: { SHOW_TEXT: 4 }, clearTimeout, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); return timer; } };
   let observer;
   let bridgeObserver;
@@ -201,7 +202,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   });
   restartBackground();
   const sendWorker = message => new Promise(resolve => workerListener(structuredClone(message), { id: 'privy-test' }, resolve));
-  const bridge = vm.createContext({ ...shared, window: bridgeWindow, document: {
+  const bridge = vm.createContext({ ...shared, Date: class extends Date { static now() { return now; } }, ...(fakeUnmaskTimers ? { setTimeout: (fn, ms) => { const timer = { fn, at: now + ms }; unmaskTimers.push(timer); return timer; } } : {}), window: bridgeWindow, document: {
     documentElement: {},
     createTreeWalker: root => { let i = 0; return { nextNode: () => root.children[i++] }; }
   }, MutationObserver: class { constructor(fn) { bridgeObserver = fn; } observe() {} }, chrome: { runtime: { sendMessage: message => {
@@ -220,10 +221,39 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     }
     vm.runInContext(fs.readFileSync(file, 'utf8'), bridge, { filename: file });
   }
-  return { page: pageWindow, requests, messages, postMessages, runtimeRequests, importedExtractable, toasts, deliver, sessionStore, sendWorker, restartBackground, advanceTime: ms => { now += ms; }, installed: details => installedListener(details), mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
+  return { page: pageWindow, requests, messages, postMessages, runtimeRequests, importedExtractable, toasts, deliver, sessionStore, sendWorker, restartBackground, advanceTime: ms => { now += ms; }, runUnmaskTimers: async () => { for (const timer of unmaskTimers.splice(0)) { if (timer.at <= now) await timer.fn(); else unmaskTimers.push(timer); } }, installed: details => installedListener(details), mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
 };
 
 (async () => {
+  const restorePlaceholder = '__PII_EMAIL_abcdef123456__';
+  const restore = extension({}, { aliasMap: { [restorePlaceholder]: 'late@example.com' } }, false, false, true);
+  const textNode = data => ({ nodeType: 3, data, parentElement: { closest: () => false } });
+  const mutation = target => [{ type: 'characterData', target, addedNodes: [] }];
+  for (let i = 0; i < 10; i++) {
+    const target = textNode(restorePlaceholder);
+    await restore.mutate(mutation(target));
+    assert.strictEqual(target.data, 'late@example.com');
+  }
+  restore.advanceTime(250);
+  const deferred = textNode(restorePlaceholder);
+  await restore.mutate(mutation(deferred));
+  assert.strictEqual(deferred.data, restorePlaceholder);
+  restore.advanceTime(749);
+  await restore.runUnmaskTimers();
+  assert.strictEqual(deferred.data, restorePlaceholder);
+  restore.advanceTime(1);
+  await restore.runUnmaskTimers();
+  await until(() => deferred.data === 'late@example.com');
+  const late = extension({}, {}, false, false, true);
+  const missing = textNode(restorePlaceholder);
+  await late.mutate(mutation(missing));
+  late.sessionStore.aliasMap = { [restorePlaceholder]: 'late@example.com' };
+  late.advanceTime(29999);
+  await late.mutate(mutation(missing));
+  assert.strictEqual(missing.data, restorePlaceholder);
+  late.advanceTime(1);
+  await late.mutate(mutation(missing));
+  assert.strictEqual(missing.data, 'late@example.com');
   await runFile('sh', ['scripts/pack-extension.sh']);
   const archive = `dist/aliaschat-extension-${manifest.version}.zip`;
   const archiveFiles = (await runFile('unzip', ['-Z1', archive])).stdout.trim().split('\n');

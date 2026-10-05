@@ -114,34 +114,47 @@
   sendConfig();
 
   const eligible = node => node.nodeType === 3 && hasPlaceholder(node.data) && !node.parentElement?.closest('[contenteditable], textarea, [data-mask2ai]');
-  const unknownPlaceholders = new Set();
+  const unknownPlaceholders = new Map();
+  const pendingNodes = new Set();
+  let unmaskTimer;
   const PLACEHOLDER_RE = /__PII_[A-Z_]+_(?:[0-9a-f]{12}|[0-9a-f]{6})__/g;
   let unmaskWindowStart = 0;
   let unmaskCount = 0;
-  new MutationObserver(async muts => {
-    const nodes = new Set();
+  new MutationObserver(muts => {
     for (const m of muts) {
-      if (m.type === 'characterData' && eligible(m.target)) nodes.add(m.target);
+      if (m.type === 'characterData' && eligible(m.target)) pendingNodes.add(m.target);
       for (const n of m.addedNodes) {
-        if (eligible(n)) nodes.add(n);
+        if (eligible(n)) pendingNodes.add(n);
         else if (n.nodeType === 1) {
           const walker = document.createTreeWalker(n, NodeFilter.SHOW_TEXT);
           let child;
-          while ((child = walker.nextNode())) if (eligible(child)) nodes.add(child);
+          while ((child = walker.nextNode())) if (eligible(child)) pendingNodes.add(child);
         }
       }
     }
-    if (!nodes.size) return;
+    return flushUnmask();
+  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  const flushUnmask = async () => {
+    if (!pendingNodes.size) return;
     const now = Date.now();
-    if (now - unmaskWindowStart > 1000) {
+    if (now - unmaskWindowStart >= 1000) {
       unmaskWindowStart = now;
       unmaskCount = 0;
     }
-    if (unmaskCount >= 10) return;
+    if (unmaskCount >= 10) {
+      if (!unmaskTimer) unmaskTimer = setTimeout(() => {
+        unmaskTimer = undefined;
+        void flushUnmask();
+      }, Math.max(0, 1000 - (now - unmaskWindowStart)));
+      return;
+    }
     unmaskCount++;
-    const targets = [...nodes].filter(node => {
+    const nodes = [...pendingNodes];
+    pendingNodes.clear();
+    const targets = nodes.filter(node => {
+      if (!eligible(node)) return false;
       const placeholders = node.data.match(PLACEHOLDER_RE) || [];
-      return placeholders.some(p => !unknownPlaceholders.has(p));
+      return placeholders.some(p => !unknownPlaceholders.has(p) || now - unknownPlaceholders.get(p) >= 30000);
     });
     if (!targets.length) return;
     const values = await getMap();
@@ -149,7 +162,7 @@
     const body = original.map(text => unmask(text, values));
     for (let i = 0; i < targets.length; i++) {
       const placeholders = original[i].match(PLACEHOLDER_RE) || [];
-      for (const p of placeholders) if (body[i].includes(p)) unknownPlaceholders.add(p);
+      for (const p of placeholders) if (body[i].includes(p)) unknownPlaceholders.set(p, now);
     }
     const updates = targets.map((node, i) => ({ node, before: original[i], after: body[i] })).filter(({ node, before, after }) => after !== before && node.data === before && eligible(node));
     if (!updates.length) return;
@@ -164,5 +177,5 @@
         try { node.data = before; } catch {}
       }
     }
-  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  };
 })();

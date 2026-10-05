@@ -191,3 +191,8 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 ## Privacy note
 
 此仓库公开，交接文件不得记录内部业务细节（收入目标、定价、本地绝对路径、工具额度）；条目应仅记录技术进展、架构决策与验证结果。
+
+## Batch 2 — M3 DOM restoration (2026-10-05)
+
+- Throttled text nodes are queued and retried after the remaining one-second window. Unknown placeholder lookups expire after 30 seconds, allowing later mutations to restore newly stored mappings.
+- Extension VM regressions cover the timer boundary and lookup expiry. `timeout 60 node test.js`, `node test-security.js`, and `npm test` passed without a Swift timeout; `git diff --check` passed. Versions remain 0.7.0.
