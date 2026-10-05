@@ -68,15 +68,23 @@ assert(isChatRequest("https://chatgpt.com/backend-api/f/conversation"));
 assert(isChatRequest("https://chatgpt.com/backend-anon/f/conversation?x=1"));
 assert(isChatRequest("https://chatgpt.com/unauth-mweb/conversation/updates?lightweight_authenticated=0&operationId=1"));
 assert(isChatRequest("https://chatgpt.com/backend-api/conversation/prepare"));
+assert(isChatRequest("https://claude.ai/api/organizations/o1/chat_conversations/c1/retry_completion"));
+assert(isChatRequest("https://chatgpt.com/backend-api/conversation/c1/title"));
+assert(isChatRequest("https://claude.ai/api/organizations/o1/chat_conversations/550e8400-e29b-41d4-a716-446655440000"));
+assert(isChatRequest("https://claude.ai/api/completion?x=1#fragment"));
+assert(isChatRequest("https://chatgpt.com/backend-api/conversation/c1/title?x=1#fragment"));
 assert(!isChatRequest("https://chatgpt.com/backend-api/me"));
 assert(!isChatRequest("https://chatgpt.com/unauth-mweb/sentinel/ping"));
+for (const path of ["mycompletionx", "conversation_history", "chat_conversations_extra", "me?next=/conversation", "me# /completion"]) {
+  assert(!isChatRequest("https://chatgpt.com/backend-api/" + path));
+}
 const ff = {};
 const form = new URLSearchParams(rewrite("conversationState=" + encodeURIComponent(JSON.stringify({ backendConversationId: "6aad6fb5", messages: [{ content: "old mail ali@example.com" }] })) + "&prompt=" + encodeURIComponent("Say ok. Ref probe.person@example.org") + "&chatRequirementsToken=gAAAAABqrW_omd7nK", mask, ff));
 assert(/^Say ok\. Ref __PII_EMAIL_[0-9a-f]{12}__$/.test(form.get("prompt")), form.get("prompt"));
 assert(JSON.parse(form.get("conversationState")).messages[0].content.startsWith("old mail __PII_EMAIL_"));
 assert.strictEqual(form.get("chatRequirementsToken"), "gAAAAABqrW_omd7nK");
 assert.deepStrictEqual(Object.values(ff).sort(), ["ali@example.com", "probe.person@example.org"]);
-assert(!isChatRequest("https://claude.ai/api/organizations/o1/chat_conversations/c1/completion_history"));
+assert(isChatRequest("https://claude.ai/api/organizations/o1/chat_conversations/c1/completion_history"));
 const fc = {};
 const claudeBody = JSON.parse(rewrite(JSON.stringify({ prompt: "mail ali@example.com", attachments: [{ extracted_content: "card 4111 1111 1111 1111" }], parent_message_uuid: "550e8400-e29b-41d4-a716-446655440000" }), mask, fc));
 assert(!claudeBody.prompt.includes("ali@") && !claudeBody.attachments[0].extracted_content.includes("4111"));
@@ -84,6 +92,31 @@ assert.strictEqual(claudeBody.parent_message_uuid, "550e8400-e29b-41d4-a716-4466
 const fg = {};
 const gptBody = JSON.parse(rewrite(JSON.stringify({ action: "next", messages: [{ content: { content_type: "text", parts: ["call +90 532 123 45 67"] } }], model: "auto" }), mask, fg));
 assert(/^call __PII_PHONE_[0-9a-f]{12}__$/.test(gptBody.messages[0].content.parts[0]) && gptBody.model === "auto");
+const fieldInput = {
+  message_content: "contact jane.doe@example.com",
+  file_name: "jane.doe@example.com.txt",
+  attachments: [{ name: "jane.doe@example.com.pdf", extracted_content: "jane.doe@example.com", metadata: { name: "jane.doe@example.com" } }, null, { name: 42 }],
+  name: "jane.doe@example.com",
+  model: { name: "jane.doe@example.com" },
+  metadata: { attachments: { name: "jane.doe@example.com" } }
+};
+const fieldFound = {};
+const fieldBody = JSON.parse(rewrite(JSON.stringify(fieldInput), mask, fieldFound));
+for (const value of [fieldBody.message_content, fieldBody.file_name, fieldBody.attachments[0].name, fieldBody.attachments[0].extracted_content]) {
+  assert(value.includes("__PII_EMAIL_") && !value.includes("jane.doe@example.com"), value);
+}
+assert.deepStrictEqual(fieldBody.attachments.slice(1), [null, { name: 42 }]);
+assert.strictEqual(fieldBody.attachments[0].metadata.name, fieldInput.attachments[0].metadata.name);
+assert.strictEqual(fieldBody.name, fieldInput.name);
+assert.deepStrictEqual(fieldBody.model, fieldInput.model);
+assert.deepStrictEqual(fieldBody.metadata, fieldInput.metadata);
+assert.strictEqual(unmask(JSON.stringify(fieldBody), fieldFound), JSON.stringify(fieldInput));
+const filenameBody = JSON.parse(rewrite(JSON.stringify({ attachments: [{ name: "John_Smith_passport.pdf" }] }), value => "masked:" + value, {}));
+assert.strictEqual(filenameBody.attachments[0].name, "masked:John_Smith_passport.pdf");
+const fieldForm = new URLSearchParams(rewrite(new URLSearchParams({ message_content: fieldInput.message_content, file_name: fieldInput.file_name, state: JSON.stringify(fieldInput) }).toString(), mask, {}));
+assert(fieldForm.get("message_content").includes("__PII_EMAIL_"));
+assert(fieldForm.get("file_name").includes("__PII_EMAIL_"));
+assert.deepStrictEqual(JSON.parse(fieldForm.get("state")), fieldBody);
 
 (async () => {
   const te = new TextEncoder();
@@ -114,14 +147,15 @@ assert(/^call __PII_PHONE_[0-9a-f]{12}__$/.test(gptBody.messages[0].content.part
   const txt = await files.maskFile(new File(["call +1 555 555 5555"], "notes.txt", { type: "text/plain" }), mask, {});
   assert.strictEqual(await txt.text(), mask("call +1 555 555 5555", {}));
   const pdf = new File([new Uint8Array([37, 80, 68, 70])], "scan.pdf", { type: "application/pdf" });
-  assert.strictEqual(await files.maskFile(pdf, mask, {}), pdf);
+  assert.strictEqual(await files.maskFile(pdf, mask, {}, () => {}, { allowOpaqueUploads: true }), pdf);
   const warned = [];
   const form = new FormData();
   form.append("file", docxFile, "Contact.docx");
   form.append("scan", pdf, "scan.pdf");
   form.append("purpose", "chat");
-  const outForm = await files.maskFormData(form, mask, {}, name => warned.push(name));
-  assert.deepStrictEqual(warned, ["scan.pdf"]);
+  const outForm = await files.maskFormData(form, mask, {}, name => warned.push(name), { allowOpaqueUploads: true });
+  assert.strictEqual(warned.length, 1);
+  assert(warned[0].includes("scan.pdf was uploaded uninspected"));
   assert.strictEqual(outForm.get("purpose"), "chat");
   assert(!(await outForm.get("file").text()).includes("jane.doe") || true);
   assert.strictEqual(files.classify("photo.HEIC"), "opaque");
@@ -141,11 +175,11 @@ assert(!mask("Dr. Jane Doe", {}).includes("Jane Doe"));
 const data = fs.mkdtempSync(path.join(os.tmpdir(), 'mask2ai-'));
 const hookSource = fs.readFileSync(path.join(__dirname, 'hooks/mask.js'), 'utf8');
 const hookRequire = require('module').createRequire(path.join(__dirname, 'hooks/mask.js'));
-const run = (input, pluginData = data, home) => {
+const run = (input, pluginData = data, home, fsOverrides = {}, stdin) => {
   let output = '';
   const hookModule = {};
-  const inputText = JSON.stringify({ session_id: 's1', ...input });
-  const isolatedRequire = name => name === 'fs' ? { ...fs, readFileSync: (file, ...args) => file === 0 ? inputText : fs.readFileSync(file, ...args) } : name === 'os' && home ? { ...os, homedir: () => home } : hookRequire(name);
+  const inputText = stdin === undefined ? JSON.stringify({ session_id: 's1', ...input }) : stdin;
+  const isolatedRequire = name => name === 'fs' ? { ...fs, readFileSync: (file, ...args) => file === 0 ? inputText : fs.readFileSync(file, ...args), ...fsOverrides } : name === 'os' && home ? { ...os, homedir: () => home } : hookRequire(name);
   isolatedRequire.main = hookModule;
   require('vm').runInNewContext(hookSource, {
     require: isolatedRequire,
@@ -162,6 +196,69 @@ assert.strictEqual(blocked.decision, 'block');
 assert(blocked.suppressOriginalPrompt);
 assert(!blocked.reason.includes('ali@example.com'));
 assert(/__PII_EMAIL_[0-9a-f]{12}__/.test(blocked.reason));
+
+const keyReadError = {
+  readFileSync: (file, ...args) => {
+    if (file === 0) return JSON.stringify({ session_id: 's1', hook_event_name: 'UserPromptSubmit', prompt: 'email private@example.com' });
+    if (file === path.join(data, 'placeholder.key')) throw new Error('Key unreadable');
+    return fs.readFileSync(file, ...args);
+  }
+};
+const failedPrompt = run({}, data, undefined, keyReadError);
+assert.strictEqual(failedPrompt.decision, 'block');
+assert.strictEqual(failedPrompt.suppressOriginalPrompt, true);
+assert(failedPrompt.reason.includes('AliasChat error: Key unreadable. Your prompt was NOT sent'));
+assert(!failedPrompt.reason.includes('private@example.com'));
+const corruptPrompt = run({}, data, undefined, {}, '{broken JSON');
+assert.strictEqual(corruptPrompt.decision, 'block');
+assert.strictEqual(corruptPrompt.suppressOriginalPrompt, true);
+for (const hook_event_name of ['SessionStart', 'PostToolUse', 'PreToolUse', 'MessageDisplay', 'SessionEnd']) {
+  const failure = run({ hook_event_name }, data, undefined, {
+    existsSync: () => { throw new Error('Config unreadable'); }
+  });
+  if (hook_event_name === 'SessionStart' || hook_event_name === 'PostToolUse') assert(failure.systemMessage.includes('AliasChat did not mask'));
+  else assert.strictEqual(failure, null);
+}
+
+const atomicData = path.join(data, 'atomic');
+const atomicKey = path.join(atomicData, 'placeholder.key');
+let renamedKey = false;
+run({ hook_event_name: 'UserPromptSubmit', prompt: 'email private@example.com' }, atomicData, undefined, {
+  writeFileSync: (file, content, options) => {
+    assert(!fs.existsSync(atomicKey), 'The final key must not be readable during the write');
+    assert(/^placeholder-.*\.tmp$/.test(path.basename(file)));
+    assert.strictEqual(content.length, 32);
+    assert.strictEqual(options.mode, 0o600);
+    fs.writeFileSync(file, content, options);
+    const concurrent = run({ hook_event_name: 'UserPromptSubmit', prompt: 'email other@example.com' }, atomicData);
+    assert.strictEqual(concurrent.decision, 'block');
+    assert.strictEqual(concurrent.suppressOriginalPrompt, true);
+    assert(fs.existsSync(file), 'A concurrent hook must not remove an active temporary key');
+  },
+  renameSync: (source, target) => {
+    assert.strictEqual(path.dirname(source), atomicData);
+    assert.strictEqual(target, atomicKey);
+    assert.strictEqual(fs.readFileSync(source).length, 32);
+    fs.renameSync(source, target);
+    renamedKey = true;
+  }
+});
+assert(renamedKey, 'The complete temporary key must be published by rename');
+assert.strictEqual(fs.readFileSync(atomicKey).length, 32);
+assert.strictEqual(fs.statSync(atomicKey).mode & 0o777, 0o600);
+assert.deepStrictEqual(fs.readdirSync(atomicData), ['placeholder.key', 's1.jsonl']);
+const interruptedData = path.join(data, 'interrupted');
+const interrupted = run({ hook_event_name: 'UserPromptSubmit', prompt: 'email private@example.com' }, interruptedData, undefined, {
+  writeFileSync: (file, content, options) => {
+    fs.writeFileSync(file, content.subarray(0, 8), options);
+    throw new Error('Key write interrupted');
+  }
+});
+assert.strictEqual(interrupted.decision, 'block');
+assert.strictEqual(interrupted.suppressOriginalPrompt, true);
+assert.deepStrictEqual(fs.readdirSync(interruptedData), []);
+assert.strictEqual(run({ hook_event_name: 'UserPromptSubmit', prompt: 'email private@example.com' }, interruptedData).decision, 'block');
+assert.strictEqual(fs.readFileSync(path.join(interruptedData, 'placeholder.key')).length, 32);
 
 const staleTemporary = path.join(data, 'placeholder-stale.tmp');
 fs.writeFileSync(staleTemporary, 'incomplete key');

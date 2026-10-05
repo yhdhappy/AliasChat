@@ -67,15 +67,26 @@ pii.configure({ disable: ['PHONE_CN', 'ID_CN', 'CARD_CN', 'CARD'] });
 assert.strictEqual(pii.mask(chinese, {}), chinese);
 pii.configure({});
 
-for (const text of ['a'.repeat(40000), 'a@' + 'a.'.repeat(20000) + '1', 'a@' + 'a'.repeat(40000)]) {
+const base64urlText = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-'.repeat(625);
+for (const text of ['a'.repeat(40000), '-'.repeat(40000), '_'.repeat(40000), base64urlText, 'a@' + 'a.'.repeat(20000) + '1', 'a@' + 'a'.repeat(40000), '@' + '-'.repeat(40000), 'a@' + '-'.repeat(40000), 'a@' + '-.'.repeat(20000) + '1']) {
   const start = performance.now();
-  assert.strictEqual(pii.mask(text, {}), text);
-  assert(performance.now() - start < 200, 'Long non-email text must be processed in under 200ms');
+  const masked = pii.mask(text, {});
+  const elapsed = performance.now() - start;
+  assert.strictEqual(masked, text);
+  assert(elapsed < 200, `Long non-email text must be processed in under 200ms (took ${elapsed.toFixed(2)}ms)`);
 }
-for (const email of ['a+b.c_d%z@example.co.uk', 'A@sub-domain.example.COM']) {
+for (const email of ['test@example.com', 'a-b_c.d+e@x.co', '-test@example.com', '_test@example.com', '--__test@example.com', 'a+b.c_d%z@example.co.uk', 'A@sub-domain.example.COM']) {
   const values = {};
   assert(/^__PII_EMAIL_[0-9a-f]{12}__$/.test(pii.mask(email, values)));
   assert.deepStrictEqual(Object.values(values), [email]);
+}
+{
+  const text = 'a@b.com,c@d.com;e@f.org';
+  const values = {};
+  const masked = pii.mask(text, values);
+  assert.deepStrictEqual(Object.values(values), ['a@b.com', 'c@d.com', 'e@f.org']);
+  assert.strictEqual((masked.match(/__PII_EMAIL_/g) || []).length, 3);
+  assert.strictEqual(pii.unmask(masked, values), text);
 }
 const legacyEmailPattern = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
 for (const text of ['alice@x.com-bob@y.com', 'alice@x.com_bob@y.com', 'alice@x.com bob@y.com']) {
@@ -119,7 +130,8 @@ const createWorker = () => {
 
 const delay = () => new Promise(resolve => setImmediate(resolve));
 const until = async predicate => {
-  for (let i = 0; i < 100; i++) {
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
     if (predicate()) return;
     await delay();
   }
@@ -128,11 +140,13 @@ const until = async predicate => {
 const extension = (config = {}, sessionStore = {}, failDigests = false, failFirstImport = false) => {
   const listeners = [];
   const messages = [];
+  const postMessages = [];
   const runtimeRequests = [];
   const importedExtractable = [];
   const requests = [];
   const toasts = [];
-  const shared = { crypto: webcrypto, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, Request, Response, Blob, File, FormData, URLSearchParams, CompressionStream, DecompressionStream, Event, NodeFilter: { SHOW_TEXT: 4 }, clearTimeout, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); return timer; } };
+  let now = 0;
+  const shared = { location: { origin: 'https://chatgpt.com' }, performance: { now: () => now }, crypto: webcrypto, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, Request, Response, Blob, File, FormData, URLSearchParams, CompressionStream, DecompressionStream, Event, NodeFilter: { SHOW_TEXT: 4 }, clearTimeout, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); return timer; } };
   let observer;
   let bridgeObserver;
   let bridgeMaskCalls = 0;
@@ -157,8 +171,9 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   };
   for (const window of [pageWindow, bridgeWindow]) {
     window.addEventListener = (type, fn) => { if (type === 'message') listeners.push({ window, fn }); };
-    window.postMessage = data => {
+    window.postMessage = (data, targetOrigin) => {
       messages.push(structuredClone(data));
+      postMessages.push({ data: structuredClone(data), targetOrigin });
       queueMicrotask(() => deliver(data));
     };
   }
@@ -185,13 +200,14 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     chrome: { storage: { session }, runtime: { id: 'privy-test', onStartup: { addListener() {} }, onInstalled: { addListener: fn => { installedListener = fn; } }, onMessage: { addListener: fn => { workerListener = fn; } } } }
   });
   restartBackground();
+  const sendWorker = message => new Promise(resolve => workerListener(structuredClone(message), { id: 'privy-test' }, resolve));
   const bridge = vm.createContext({ ...shared, window: bridgeWindow, document: {
     documentElement: {},
     createTreeWalker: root => { let i = 0; return { nextNode: () => root.children[i++] }; }
   }, MutationObserver: class { constructor(fn) { bridgeObserver = fn; } observe() {} }, chrome: { runtime: { sendMessage: message => {
     runtimeRequests.push(structuredClone(message));
     if (failDigests && message.type === 'privy-digests') return Promise.reject(new Error('Worker unavailable'));
-    return new Promise(resolve => workerListener(structuredClone(message), { id: 'privy-test' }, resolve));
+    return sendWorker(message);
   } }, storage: { sync: { get: (key, fn) => queueMicrotask(() => fn({ config })) }, session } } });
   const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
   for (const file of manifest.content_scripts[0].js) {
@@ -204,7 +220,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     }
     vm.runInContext(fs.readFileSync(file, 'utf8'), bridge, { filename: file });
   }
-  return { page: pageWindow, requests, messages, runtimeRequests, importedExtractable, toasts, deliver, sessionStore, restartBackground, installed: details => installedListener(details), mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
+  return { page: pageWindow, requests, messages, postMessages, runtimeRequests, importedExtractable, toasts, deliver, sessionStore, sendWorker, restartBackground, advanceTime: ms => { now += ms; }, installed: details => installedListener(details), mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
 };
 
 (async () => {
@@ -241,9 +257,117 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
 
   const cleanExt = extension();
   const url = 'https://chatgpt.com/backend-api/f/conversation';
+  const limited = extension();
+  const limitedToken = limited.messages.find(message => message.type === 'mask2ai-config').token;
+  const limitError = 'AliasChat is handling too many masking requests; please wait a moment and resend.';
+  const probe = id => limited.deliver({ type: 'mask-request', token: limitedToken, id, format: 'chat', body: JSON.stringify({ prompt: 'probe@example.com' }) });
+  const replies = () => limited.messages.filter(message => message.type === 'mask-result');
+  for (let i = 0; i < 15; i++) probe(`burst-${i}`);
+  await until(() => replies().length === 15);
+  for (let i = 0; i < 15; i++) {
+    const reply = replies().find(message => message.id === `burst-${i}`);
+    assert.strictEqual(reply.token, limitedToken);
+    if (i < 10) {
+      assert(reply.result.body.includes('__PII_EMAIL_'));
+      assert.strictEqual(reply.error, undefined);
+    } else {
+      assert.strictEqual(reply.error, limitError);
+      assert.strictEqual(reply.result, undefined);
+    }
+  }
+  assert.strictEqual(limited.bridgeMaskCalls, 20, 'Only ten accepted requests may run the two masking passes');
+  assert.strictEqual(limited.runtimeRequests.filter(message => message.type === 'privy-digests').length, 10);
+  const callsAtLimit = limited.bridgeMaskCalls;
+  const runtimeAtLimit = limited.runtimeRequests.length;
+  await assert.rejects(limited.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'blocked@example.com' }) }), { message: limitError });
+  assert.strictEqual(limited.requests.length, 0, 'Exhausting the bucket must block the real send');
+  limited.advanceTime(999);
+  probe('too-soon');
+  assert.strictEqual(replies().find(message => message.id === 'too-soon').error, limitError);
+  assert.strictEqual(limited.bridgeMaskCalls, callsAtLimit);
+  assert.strictEqual(limited.runtimeRequests.length, runtimeAtLimit, 'Rejected requests must not invoke the worker');
+  limited.advanceTime(1);
+  probe('one-refilled');
+  await until(() => replies().some(message => message.id === 'one-refilled' && message.result));
+  probe('refill-spent');
+  assert.strictEqual(replies().find(message => message.id === 'refill-spent').error, limitError);
+  limited.advanceTime(10000);
+  for (let i = 0; i < 11; i++) probe(`refilled-${i}`);
+  await until(() => replies().filter(message => message.id.startsWith('refilled-')).length === 11);
+  assert.strictEqual(replies().filter(message => message.id.startsWith('refilled-') && message.result).length, 10);
+  assert.strictEqual(replies().find(message => message.id === 'refilled-10').error, limitError);
+  for (const file of ['extension/content.js', 'extension/bridge.js']) {
+    assert(!/postMessage\([^\n]*,\s*['"]\*['"]\)/.test(fs.readFileSync(file, 'utf8')), `${file} must not post to a wildcard origin`);
+  }
+  for (const { data, targetOrigin } of limited.postMessages) {
+    assert.strictEqual(targetOrigin, 'https://chatgpt.com', `Unexpected target origin for ${data.type}`);
+  }
   const callsBeforeClean = cleanExt.bridgeMaskCalls;
   await cleanExt.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'no personal data here' }) });
   assert.strictEqual(cleanExt.bridgeMaskCalls - callsBeforeClean, 1, 'A clean body should be masked in one pass');
+  const coverageExt = extension();
+  const coverageBody = {
+    message_content: 'contact coverage@example.com',
+    file_name: 'coverage@example.com.txt',
+    attachments: [{ name: 'coverage@example.com.pdf', metadata: { name: 'coverage@example.com' } }, null, { name: 42 }],
+    model: { name: 'coverage@example.com' },
+    metadata: { attachments: { name: 'coverage@example.com' } }
+  };
+  for (const coverageUrl of [
+    'https://claude.ai/api/organizations/o1/chat_conversations/c1/retry_completion',
+    'https://chatgpt.com/backend-api/conversation/c1/title',
+    'https://claude.ai/api/organizations/o1/chat_conversations/550e8400-e29b-41d4-a716-446655440000'
+  ]) {
+    await coverageExt.page.fetch(coverageUrl, { method: 'POST', body: JSON.stringify(coverageBody) });
+    const rewritten = JSON.parse(coverageExt.requests.at(-1).init.body);
+    for (const value of [rewritten.message_content, rewritten.file_name, rewritten.attachments[0].name]) {
+      assert(value.includes('__PII_EMAIL_') && !value.includes('coverage@example.com'), value);
+    }
+    assert.deepStrictEqual(rewritten.attachments.slice(1), [null, { name: 42 }]);
+    assert.deepStrictEqual(rewritten.attachments[0].metadata, coverageBody.attachments[0].metadata);
+    assert.deepStrictEqual(rewritten.model, coverageBody.model);
+    assert.deepStrictEqual(rewritten.metadata, coverageBody.metadata);
+  }
+  await coverageExt.page.fetch(url, { method: 'POST', body: new URLSearchParams({
+    message_content: coverageBody.message_content,
+    file_name: coverageBody.file_name,
+    state: JSON.stringify(coverageBody)
+  }) });
+  const coverageForm = coverageExt.requests.at(-1).init.body;
+  assert(coverageForm.get('message_content').includes('__PII_EMAIL_'));
+  assert(coverageForm.get('file_name').includes('__PII_EMAIL_'));
+  assert(JSON.parse(coverageForm.get('state')).attachments[0].name.includes('__PII_EMAIL_'));
+  const mapRace = extension({}, { aliasMap: { saved: 'original' } });
+  const tabA = (await mapRace.sendWorker({ type: 'privy-map-get' })).privyMap;
+  const tabB = (await mapRace.sendWorker({ type: 'privy-map-get' })).privyMap;
+  tabA.first = 'tab A';
+  tabB.second = 'tab B';
+  await mapRace.sendWorker({ type: 'privy-map-set', privyMap: tabA });
+  await mapRace.sendWorker({ type: 'privy-map-set', privyMap: tabB });
+  assert.deepStrictEqual(mapRace.sessionStore.aliasMap, { saved: 'original', first: 'tab A', second: 'tab B' }, 'Stale tab snapshots must merge instead of replacing existing entries');
+  await Promise.all([
+    mapRace.sendWorker({ type: 'privy-map-set', privyMap: { third: 'tab A' } }),
+    mapRace.sendWorker({ type: 'privy-map-set', privyMap: { fourth: 'tab B' } })
+  ]);
+  assert.deepStrictEqual(mapRace.sessionStore.aliasMap, { saved: 'original', first: 'tab A', second: 'tab B', third: 'tab A', fourth: 'tab B' }, 'Simultaneous background handlers must serialize their read/merge/write operations');
+  await mapRace.sendWorker({ type: 'privy-map-set', privyMap: { saved: 'updated' } });
+  assert.strictEqual(mapRace.sessionStore.aliasMap.saved, 'updated', 'Incoming values must win on key conflicts');
+  const cappedMap = extension();
+  const fullMap = Object.fromEntries(Array.from({ length: 20000 }, (_, i) => [`entry-${i}`, `value-${i}`]));
+  assert.strictEqual((await cappedMap.sendWorker({ type: 'privy-map-set', privyMap: fullMap })).ok, true, 'A map at the capacity cap must be accepted');
+  const storedAtCap = cappedMap.sessionStore.aliasMap;
+  const capacityError = 'AliasChat placeholder map is full (20001 entries). Restart the browser to clear it (the map lives in session storage).';
+  const overCapacity = await cappedMap.sendWorker({ type: 'privy-map-set', privyMap: { extra: 'overflow', 'entry-0': 'must not overwrite' } });
+  assert.strictEqual(overCapacity.error, capacityError);
+  assert.strictEqual(cappedMap.sessionStore.aliasMap, storedAtCap, 'An oversized map must not be written to storage');
+  assert.deepStrictEqual(cappedMap.sessionStore.aliasMap, fullMap, 'Rejected writes must preserve every stored entry and value');
+  await assert.rejects(cappedMap.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact capacity@example.com' }) }), error => error.message === capacityError && error.code === 'map-storage-error');
+  assert.strictEqual(cappedMap.requests.length, 0, 'The bridge must block the send when storing placeholders fails');
+  assert(cappedMap.messages.some(message => message.type === 'mask-result' && message.error === capacityError && !message.result), 'The bridge must propagate the capacity error without returning a masked body');
+  assert(cappedMap.toasts.some(text => text.includes(capacityError)), 'The blocked send must show the capacity error to the user');
+  assert.strictEqual(cappedMap.sessionStore.aliasMap, storedAtCap);
+  assert.strictEqual((await cappedMap.sendWorker({ type: 'privy-map-set', privyMap: { 'entry-0': 'replacement' } })).ok, true, 'Updating an existing entry at capacity must still succeed');
+  assert.strictEqual(cappedMap.sessionStore.aliasMap['entry-0'], 'replacement');
   const updateProbe = extension();
   await updateProbe.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact first@example.com' }) });
   delete updateProbe.sessionStore.aliasMap;
@@ -371,6 +495,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   await ext.page.fetch(url, { method: 'POST', body: new Uint8Array(compressed) });
   const compressedWire = ext.requests.at(-1).init.body;
   assert.strictEqual(await new Response(new Blob([compressedWire]).stream().pipeThrough(new DecompressionStream('gzip'))).text(), wire);
+  ext.advanceTime(10000);
   const params = new URLSearchParams({ prompt: 'jane.doe@example.com', token: 'unchanged' });
   await ext.page.fetch(url, { method: 'POST', body: params });
   assert.strictEqual(ext.requests.at(-1).init.body.get('token'), 'unchanged');
@@ -425,6 +550,85 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   assert.strictEqual(allowedUpload.requests.length, 1);
   assert.strictEqual(await allowedUpload.requests[0].init.body.get('file').text(), '%PDF-1.7');
   assert(allowedUpload.toasts.some(text => text.includes('uploaded uninspected')));
+  const unknownUpload = extension();
+  for (const name of ['private.eml', 'private.zip']) {
+    const unknown = new File(['jane.doe@example.com'], name);
+    await assert.rejects(unknownUpload.page.fetch(url, { method: 'POST', body: unknown }), error => error.code === 'unknown-blocked');
+    const allowedUnknown = extension({ allowUnknownUploads: true });
+    await allowedUnknown.page.fetch(url, { method: 'POST', body: unknown });
+    assert.strictEqual(await allowedUnknown.requests[0].init.body.text(), await unknown.text());
+    assert(allowedUnknown.toasts.some(text => text.includes('uploaded uninspected')));
+  }
+  assert.strictEqual(unknownUpload.requests.length, 0);
+  assert(unknownUpload.toasts.every(text => text.includes('allowUnknownUploads')));
+  const namedUpload = new FormData();
+  namedUpload.append('file', new File(['%PDF-1.7'], 'John_Smith_passport.pdf'));
+  await allowedUpload.page.fetch(url, { method: 'POST', body: namedUpload });
+  const maskedName = allowedUpload.requests.at(-1).init.body.get('file').name;
+  assert(/^__PII_NAME_[0-9a-f]{12}___passport\.pdf$/.test(maskedName), maskedName);
+  const directForm = await require('./extension/files.js').maskFormData(namedUpload, pii.mask, {}, () => {}, { allowOpaqueUploads: true });
+  assert(/^__PII_NAME_[0-9a-f]{12}___passport\.pdf$/.test(directForm.get('file').name));
+  const metadata = extension();
+  const metadataUrl = 'https://chatgpt.com/backend-api/files';
+  const metadataBody = JSON.stringify({ file_name: 'John_Smith_passport.pdf', file_size: 8, use_case: 'multimodal' });
+  await metadata.page.fetch(metadataUrl, { method: 'POST', body: metadataBody });
+  const maskedMetadata = JSON.parse(metadata.requests.at(-1).init.body);
+  assert(/^__PII_NAME_[0-9a-f]{12}___passport\.pdf$/.test(maskedMetadata.file_name));
+  assert.strictEqual(maskedMetadata.file_size, 8);
+  assert.strictEqual(maskedMetadata.use_case, 'multimodal');
+  await metadata.page.fetch(new Request(metadataUrl, { method: 'POST', body: metadataBody }));
+  assert.strictEqual(JSON.parse(await metadata.requests.at(-1).input.text()).file_name, maskedMetadata.file_name);
+  const metadataXhr = new metadata.page.XMLHttpRequest();
+  metadataXhr.open('POST', metadataUrl);
+  const metadataSent = new Promise((resolve, reject) => {
+    metadataXhr.addEventListener('load', resolve);
+    metadataXhr.addEventListener('error', reject);
+  });
+  metadataXhr.send(metadataBody);
+  await metadataSent;
+  assert.strictEqual(JSON.parse(metadata.requests.at(-1).body).file_name, maskedMetadata.file_name);
+  const storageBytes = new Uint8Array([0xff, 0xfe, 0x80, 0x00]);
+  await metadata.page.fetch('https://storage.example/files/upload', { method: 'PUT', body: storageBytes });
+  assert.strictEqual(metadata.requests.at(-1).init.body, storageBytes);
+  const zip = require('./core/zip.js');
+  const office = require('./core/office.js');
+  const encoder = new TextEncoder();
+  const coreXml = '<cp:coreProperties xmlns:dc="creator@example.com"><dc:creator>Jane Doe</dc:creator><cp:lastModifiedBy>John Smith</cp:lastModifiedBy><dc:title>jane@example.com &amp; report</dc:title></cp:coreProperties>';
+  const appXml = '<Properties><Company>jane@example.com</Company></Properties>';
+  const officeBytes = await zip.write([
+    { name: 'docProps/core.xml', data: encoder.encode(coreXml) },
+    { name: 'docProps/app.xml', data: encoder.encode(appXml) },
+    { name: 'word/document.xml', data: encoder.encode('<w:t>unchanged text</w:t>') }
+  ]);
+  const maskedOffice = await zip.read(await office.mask(officeBytes, pii.mask, {}));
+  const coreText = new TextDecoder().decode(maskedOffice.find(entry => entry.name === 'docProps/core.xml').data);
+  assert(!coreText.includes('Jane Doe') && !coreText.includes('John Smith'));
+  assert(coreText.includes('<dc:creator>__PII_NAME_') && coreText.includes('<cp:lastModifiedBy>__PII_NAME_'));
+  assert(coreText.includes('xmlns:dc="creator@example.com"') && coreText.includes('&amp; report'));
+  assert(new TextDecoder().decode(maskedOffice.find(entry => entry.name === 'docProps/app.xml').data).includes('<Company>__PII_EMAIL_'));
+  for (const littleEndian of [true, false]) {
+    const text = 'Contact jane.doe@example.com';
+    const bytes = new Uint8Array(2 + text.length * 2);
+    bytes.set(littleEndian ? [0xff, 0xfe] : [0xfe, 0xff]);
+    const view = new DataView(bytes.buffer);
+    for (let i = 0; i < text.length; i++) view.setUint16(2 + i * 2, text.charCodeAt(i), littleEndian);
+    await ext.page.fetch(url, { method: 'POST', body: new File([bytes], 'unicode.txt') });
+    const maskedBytes = new Uint8Array(await ext.requests.at(-1).init.body.arrayBuffer());
+    assert.deepStrictEqual([...maskedBytes.slice(0, 2)], [...bytes.slice(0, 2)]);
+    const decoded = new TextDecoder(littleEndian ? 'utf-16le' : 'utf-16be', { fatal: true }).decode(maskedBytes);
+    assert(decoded.includes('__PII_EMAIL_') && !decoded.includes('jane.doe@example.com'));
+  }
+  for (const bytes of [new Uint8Array([0xc4, 0xe3, 0xba, 0xc3]), new Uint8Array([0x61, 0, 0x62, 0]), new Uint8Array([0xff, 0xfe, 0x61])]) {
+    const invalidEncoding = extension();
+    await invalidEncoding.page.fetch(url, { method: 'POST', body: new File([bytes], 'legacy.csv') });
+    assert.deepStrictEqual(new Uint8Array(await invalidEncoding.requests[0].init.body.arrayBuffer()), bytes);
+    assert(invalidEncoding.toasts.some(text => text.includes('text encoding could not be decoded safely')));
+  }
+  const utf8Bom = new Uint8Array([0xef, 0xbb, 0xbf, ...encoder.encode('jane.doe@example.com')]);
+  await ext.page.fetch(url, { method: 'POST', body: new File([utf8Bom], 'bom.txt') });
+  const maskedUtf8 = new Uint8Array(await ext.requests.at(-1).init.body.arrayBuffer());
+  assert.deepStrictEqual([...maskedUtf8.slice(0, 3)], [0xef, 0xbb, 0xbf]);
+  assert(new TextDecoder().decode(maskedUtf8).includes('__PII_EMAIL_'));
   const secondSession = extension();
   await secondSession.page.fetch(url, { method: 'POST', body });
   assert.notStrictEqual(secondSession.requests[0].init.body, wire);
