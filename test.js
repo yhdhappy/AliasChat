@@ -15,14 +15,56 @@ assert(iban('GB82 WEST 1234 5698 7654 32'));
 assert(iban('TR330006100519786457841326'));
 assert(!iban('GB00 WEST 1234 5698 7654 32'));
 
-const text = 'Mail ali@example.com or +1 555 555 5555, card 4111 1111 1111 1111, ssn 123-45-6789, iban GB82 WEST 1234 5698 7654 32, ts 1758200000000 v1.2.3 port 8080';
+const text = 'Mail ali@example.com or +1 555 555 5555, card 4111 1111 1111 1111, ssn 219-45-6789, iban GB82 WEST 1234 5698 7654 32, ts 1758200000000 v1.2.3 port 8080';
 const found = {};
 const masked = mask(text, found);
-assert(!/example\.com|555 5555|4111|123-45|WEST/.test(masked), masked);
+assert(!/example\.com|555 5555|4111|219-45|WEST/.test(masked), masked);
 assert(/1758200000000 v1\.2\.3 port 8080$/.test(masked), masked);
 assert.strictEqual(Object.keys(found).length, 5);
 assert.strictEqual(unmask(masked, found), text);
 assert.strictEqual(mask(text, {}), masked);
+
+for (const value of ['123-45-6789', '000-12-3456', '666-12-3456', '900-12-3456', '999-12-3456', '123-00-6789', '123-45-0000']) {
+  assert.strictEqual(mask(value, {}), value, value);
+}
+for (const value of ['219-45-6789', '111-11-1111', '001-01-0001', '899-99-9999']) {
+  const ssns = {};
+  const result = mask(value, ssns);
+  assert(/^__PII_SSN_[0-9a-f]{12}__$/.test(result), result);
+  assert.deepStrictEqual(Object.values(ssns), [value]);
+  assert.strictEqual(unmask(result, ssns), value);
+}
+for (const [value, type] of [['+14155552671', 'PHONE'], ['13800138000', 'PHONE_CN']]) {
+  const phones = {};
+  const result = mask(value, phones);
+  assert(new RegExp('^__PII_' + type + '_[0-9a-f]{12}__$').test(result), result);
+  assert.deepStrictEqual(Object.values(phones), [value]);
+  assert.strictEqual(unmask(result, phones), value);
+}
+
+for (const secret of [
+  'ghp_AbCdEf0123456789GhIj',
+  'gho_AbCdEf0123456789GhIj',
+  'github_pat_AbCdEf_0123456789GhIj',
+  'sk-AbCdEf0123456789GhIj',
+  'sk-proj-AbCdEf0123456789GhIj',
+  'eyJabc_1234.AbcDef_123.AbcDef-1234'
+]) {
+  const secrets = {};
+  const result = mask(secret, secrets);
+  assert(/^__PII_SECRET_[0-9a-f]{12}__$/.test(result), result);
+  assert.deepStrictEqual(Object.values(secrets), [secret]);
+  assert.strictEqual(unmask(result, secrets), secret);
+}
+for (const value of [
+  'sk-', 'ghp_short', 'eyJ', 'skeleton',
+  'ghp_' + 'a'.repeat(19), 'gho_' + 'a'.repeat(19),
+  'github_pat_' + 'a'.repeat(19), 'sk-' + 'a'.repeat(19),
+  'eyJabc123.AbcDef1234.AbcDef1234',
+  'eyJabc1234.AbcDef123.AbcDef1234',
+  'eyJabc1234.AbcDef1234.AbcDef123',
+  'prefixghp_' + 'a'.repeat(20)
+]) assert.strictEqual(mask(value, {}), value, value);
 
 const pii = [
   "Dr. Jane Smith will call.\nname: John Smith\n\"firstName\": \"Veli\"\naddress: 123 Main St, Springfield, IL 62704\nmail ali.yilmaz@x.com, Ali Yilmaz signed, cc ALI YILMAZ.",
@@ -162,10 +204,10 @@ assert.deepStrictEqual(JSON.parse(fieldForm.get("state")), fieldBody);
   console.log("office ok");
 })().catch(e => { console.error(e); process.exit(1); });
 
-assert.deepStrictEqual(TYPES, ["EMAIL", "IBAN", "PHONE_CN", "ID_CN", "CARD_CN", "CARD", "SSN", "PHONE", "ADDRESS", "DOB", "ID", "IP", "NAME"]);
+assert.deepStrictEqual(TYPES, ["EMAIL", "SECRET", "IBAN", "PHONE_CN", "ID_CN", "CARD_CN", "CARD", "SSN", "PHONE", "ADDRESS", "DOB", "ID", "IP", "NAME"]);
 configure({ disable: ["SSN"], allow: ["support@acme.com"], extra: [{ type: "employee id", pattern: "EMP-\\d{6}" }] });
-const mc = mask("ssn 123-45-6789, mail support@acme.com and jane.doe@example.com, badge EMP-123456", {});
-assert(mc.includes("123-45-6789") && mc.includes("support@acme.com"), mc);
+const mc = mask("ssn 219-45-6789, mail support@acme.com and jane.doe@example.com, badge EMP-123456", {});
+assert(mc.includes("219-45-6789") && mc.includes("support@acme.com"), mc);
 assert(!mc.includes("jane.doe") && /__PII_EMPLOYEEID_[0-9a-f]{12}__/.test(mc), mc);
 configure({ disable: ["NAME"] });
 assert(mask("Dr. Jane Doe and jane.doe@example.com", {}).includes("Jane Doe"));

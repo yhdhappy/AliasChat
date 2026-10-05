@@ -26,6 +26,11 @@
     return '10X98765432'[[...s.slice(0, 17)].reduce((sum, d, i) => sum + +d * weights[i], 0) % 11] === s[17].toUpperCase();
   };
 
+  const ssn = s => {
+    const [area, group, serial] = s.split('-');
+    return s !== '123-45-6789' && +area > 0 && +area !== 666 && +area < 900 && +group > 0 && +serial > 0;
+  };
+
   const iban = s => {
     const t = s.replace(/ /g, '');
     let rem = 0;
@@ -41,13 +46,14 @@
 
   const PATTERNS = [
     ['EMAIL', /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}/g],
+    ['SECRET', /(?<![\w-])(?:gh[po]_[A-Za-z0-9]{20,}|github_pat_\w{20,}|sk-[A-Za-z0-9-]{20,}|eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})(?![\w-])/g],
     ['IBAN', /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/g, iban],
-    ['PHONE_CN', /\b1[3-9]\d{9}\b/g],
+    ['PHONE_CN', /(?<!\+)\b1[3-9]\d{9}\b/g],
     ['ID_CN', /\b[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b/g, chineseId],
     ['CARD_CN', /\b62\d{14,17}\b/g, luhn],
     ['CARD', /\b[2-6]\d{14,15}\b|\b[2-6]\d{3}(?:[ -]\d{4}){3}\b|\b[2-6]\d{3}[ -]\d{6}[ -]\d{5}\b/g, luhn],
-    ['SSN', /\b\d{3}-\d{2}-\d{4}\b/g],
-    ['PHONE', /(?:\+|\b00)\d{1,3}[ .-]?\(?\d{1,4}\)?(?:[ .-]?\d{2,4}){2,4}\b|\(\d{3}\)[ .-]?\d{3}[ .-]?\d{4}\b|\b\d{3}[.-]\d{3}[.-]\d{4}\b|\b0\d{4} ?\d{6}\b/g],
+    ['SSN', /\b\d{3}-\d{2}-\d{4}\b/g, ssn],
+    ['PHONE', /(?:\+|\b00)\d{1,3}[ .-]?\(?\d{1,4}\)?(?:[ .-]?\d{2,4}){2,4}\b|\(\d{3}\)[ .-]?\d{3}[ .-]?\d{4}\b|\b\d{3}[.-]\d{3}[.-]\d{4}\b|\b0\d{4} ?\d{6}\b/g, s => !/^\d{3}-\d{2}-\d{4}$/.test(s)],
     ['ADDRESS', /(?<![\p{L}_])(?:address|addr|street[ _-]?address|billing[ _-]?address|shipping[ _-]?address|home[ _-]?address)\s*["']?\s*[:=]\s*["']?([^\n"']{8,120}?)\s*(?=[\n"']|$)/giu, addressLike],
     ['ADDRESS', /\b\d{1,5}[A-Za-z]?\s+(?:[A-Z][a-z]+\.?\s+){1,3}(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Way|Place|Pl|Highway|Hwy|Parkway|Pkwy)\b\.?(?:,?\s*(?:Apt|Suite|Ste|Unit|Floor|Fl|#)\.?\s*[\w-]+)?(?:,\s*[A-Z][a-z]+(?:\s[A-Z][a-z]+)*)?(?:,?\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?|\s+[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})?|\bP\.?O\.?\s*Box\s+\d+\b/g],
     ['DOB', /(?<![\p{L}_])(?:dob|date of birth|birth ?date|born(?: on)?|d\.?t\.?)\s*["']?\s*[:=]?\s*["']?(\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}-\d{2}-\d{2})/giu],

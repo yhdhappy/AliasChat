@@ -196,3 +196,15 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 
 - Throttled text nodes are queued and retried after the remaining one-second window. Unknown placeholder lookups expire after 30 seconds, allowing later mutations to restore newly stored mappings.
 - Extension VM regressions cover the timer boundary and lookup expiry. `timeout 60 node test.js`, `node test-security.js`, and `npm test` passed without a Swift timeout; `git diff --check` passed. Versions remain 0.7.0.
+
+## Batch 2 — M1 secret detection (2026-10-05)
+
+- Added SECRET detection for GitHub tokens, OpenAI keys (including project keys), and three-segment JWTs with strict character sets, boundaries, and minimum lengths.
+- Regressions cover every supported prefix, full-value restoration, minimum-length failures, incomplete JWTs, and ordinary words. `timeout 60 node test.js` passed (ok / office ok); `node test-security.js` passed (security ok), with no timeout.
+- Final `npm test` passed (ok / office ok / security ok).
+
+## Batch 2 — M7 detection false positives (2026-10-05)
+
+- SSN detection validates area, group, and serial components and excludes the example 123-45-6789. The positive fixture uses area 219; the existing 111-11-1111 document regression remains passing. PHONE rejects SSN-shaped candidates so invalid area-000 values are not masked through the international phone pattern.
+- PHONE_CN excludes immediately plus-prefixed digits, allowing PHONE to mask the complete +14155552671 value. Plain 13800138000 remains PHONE_CN; regressions verify classifications, stored values, and restoration.
+- `timeout 60 node test.js`, `node test-security.js`, and final `npm test` passed (ok / office ok / security ok), with no timeout. Neither item was skipped; versions remain 0.7.0. No git commands were run.
