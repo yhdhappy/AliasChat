@@ -6,6 +6,8 @@
   const td = new TextDecoder();
   const te = new TextEncoder();
   const TEXT_PARTS = /^(word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml|xl\/sharedStrings\.xml|ppt\/(slides|notesSlides)\/[^/]+\.xml)$/;
+  const PROPERTIES = /^docProps\/(core|app)\.xml$/;
+  const PROPERTY_TEXT = /(<([\w:.-]+)(?:\s[^>]*)?>)([^<]*)(<\/\2>)/g;
   const XML_TEXT = /(<(?:w:t|t|a:t)(?:\s[^>]*)?>)([^<]*)(<\/(?:w:t|t|a:t)>)/g;
   const decode = s => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
   const encode = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -14,12 +16,16 @@
     const entries = await zip.read(bytes);
     let changed = false;
     for (const e of entries) {
-      if (!TEXT_PARTS.test(e.name)) continue;
+      if (!TEXT_PARTS.test(e.name) && !PROPERTIES.test(e.name)) continue;
       const xml = td.decode(e.data);
-      const out = xml.replace(XML_TEXT, (m, open, text, close) => {
-        const masked = maskText(decode(text), found);
-        return masked === decode(text) ? m : open + encode(masked) + close;
-      });
+      const replaceText = (m, open, text, close, author = false) => {
+        const value = decode(text);
+        const masked = author ? maskText('Name: ' + value, found).slice(6) : maskText(value, found);
+        return masked === value ? m : open + encode(masked) + close;
+      };
+      const out = PROPERTIES.test(e.name)
+        ? xml.replace(PROPERTY_TEXT, (m, open, tag, text, close) => replaceText(m, open, text, close, /^(dc:creator|cp:lastModifiedBy)$/.test(tag)))
+        : xml.replace(XML_TEXT, (m, open, text, close) => replaceText(m, open, text, close));
       if (out !== xml) {
         e.data = te.encode(out);
         changed = true;

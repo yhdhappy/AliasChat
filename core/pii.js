@@ -40,7 +40,7 @@
   const addressLike = s => !/__PII_/.test(s) && /\d/.test(s) && /\p{L}{3}/u.test(s) && !/^(?:0x|\d+\.\d+\.\d+\.\d+)/i.test(s);
 
   const PATTERNS = [
-    ['EMAIL', /(?<![A-Za-z0-9.%+])[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}/g],
+    ['EMAIL', /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}/g],
     ['IBAN', /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/g, iban],
     ['PHONE_CN', /\b1[3-9]\d{9}\b/g],
     ['ID_CN', /\b[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b/g, chineseId],
@@ -65,11 +65,12 @@
     return `(?:${cap}|${upper})`;
   };
   const TYPES = [...new Set(PATTERNS.map(p => p[0]))];
-  const config = { disable: new Set(), extra: [], allow: new Set(), allowOpaqueUploads: false };
+  const config = { disable: new Set(), extra: [], allow: new Set(), allowOpaqueUploads: false, allowUnknownUploads: false };
   const configure = cfg => {
     config.disable = new Set((cfg && cfg.disable || []).map(t => String(t).toUpperCase()));
     config.allow = new Set(cfg && cfg.allow || []);
     config.allowOpaqueUploads = !!(cfg && cfg.allowOpaqueUploads);
+    config.allowUnknownUploads = !!(cfg && cfg.allowUnknownUploads);
     config.extra = (cfg && cfg.extra || []).map(e => [String(e.type || 'CUSTOM').toUpperCase().replace(/[^A-Z]/g, '') || 'CUSTOM', new RegExp(e.pattern, 'g' + (e.flags || '').replace(/g/g, ''))]);
     return config;
   };
@@ -92,16 +93,40 @@
     return candidate.slice(0, end);
   };
 
-  const apply = (text, type, re, check, found, tokenize) => text.replace(re, (...args) => {
-    const m = type === 'EMAIL' ? emailPrefix(args[0]) : args[0];
-    if (!m) return args[0];
-    const val = typeof args[1] === 'string' ? args[1] : m;
-    if (check && !check(val)) return args[0];
-    if (config.allow.has(val)) return args[0];
-    const p = `__PII_${type}_${tokenize(val)}__`;
-    found[p] = val;
-    return args[0].replace(val, p);
-  });
+  const adjacentEmail = /[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}/y;
+  const replaceEmails = (text, re, replace) => {
+    const parts = [];
+    let offset = 0;
+    let match;
+    re.lastIndex = 0;
+    while ((match = re.exec(text))) {
+      while (match) {
+        parts.push(text.slice(offset, match.index), replace(...match, match.index, text));
+        offset = match.index + match[0].length;
+        let next = offset;
+        while (text[next] === '-' || text[next] === '_') next++;
+        adjacentEmail.lastIndex = next;
+        match = adjacentEmail.exec(text);
+      }
+      re.lastIndex = offset;
+    }
+    parts.push(text.slice(offset));
+    return parts.join('');
+  };
+
+  const apply = (text, type, re, check, found, tokenize) => {
+    const replace = (...args) => {
+      const m = type === 'EMAIL' ? emailPrefix(args[0]) : args[0];
+      if (!m) return args[0];
+      const val = typeof args[1] === 'string' ? args[1] : m;
+      if (check && !check(val)) return args[0];
+      if (config.allow.has(val)) return args[0];
+      const p = `__PII_${type}_${tokenize(val)}__`;
+      found[p] = val;
+      return args[0].replace(val, p);
+    };
+    return re === PATTERNS[0][1] ? replaceEmails(text, re, replace) : text.replace(re, replace);
+  };
 
   const namesFromEmails = (found, text) => Object.entries(found)
     .filter(([p]) => p.startsWith('__PII_EMAIL_'))

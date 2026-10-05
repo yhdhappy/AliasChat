@@ -3,11 +3,12 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.piiRewrite = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
-  const TEXT_KEYS = new Set(['prompt', 'parts', 'extracted_content', 'text', 'content']);
-  const isChatRequest = url => /\/(completion|conversation|chat_conversations)(\/[a-z_]+)?(\?|$)/.test(url.split('#')[0]);
-  const walk = (v, key, mask, found) => typeof v === 'string' ? (TEXT_KEYS.has(key) ? mask(v, found) : v)
-    : Array.isArray(v) ? v.map(x => walk(x, key, mask, found))
-    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, k, mask, found)]))
+  const TEXT_KEYS = new Set(['prompt', 'parts', 'extracted_content', 'text', 'content', 'message_content', 'file_name']);
+  const isChatRequest = url => /\/(completion|conversation|chat_conversations)(\/.*)?$/.test(url.split(/[?#]/)[0]);
+  const isUploadMetadataRequest = url => /^(?:https:\/\/(?:chatgpt\.com|chat\.openai\.com))?\/backend-api\/files\/?$/.test(url.split(/[?#]/)[0]);
+  const walk = (v, key, mask, found, attachment = false) => typeof v === 'string' ? (TEXT_KEYS.has(key) ? mask(v, found) : v)
+    : Array.isArray(v) ? v.map(x => walk(x, key, mask, found, key === 'attachments'))
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, attachment && k === 'name' ? 'file_name' : k, mask, found)]))
     : v;
   const rewriteJson = (text, mask, found) => JSON.stringify(walk(JSON.parse(text), '', mask, found));
   const rewriteForm = (text, mask, found) => {
@@ -23,5 +24,5 @@
     return params.toString();
   };
   const rewrite = (bodyText, mask, found) => /^\s*[[{]/.test(bodyText) ? rewriteJson(bodyText, mask, found) : rewriteForm(bodyText, mask, found);
-  return { isChatRequest, rewrite };
+  return { isChatRequest, isUploadMetadataRequest, rewrite };
 });

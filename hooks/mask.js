@@ -20,11 +20,30 @@ const mask = (text, found) => {
   if (!tokenize) {
     ensureDir(dir);
     const keyFile = path.join(dir, 'placeholder.key');
-    if (legacyDir && fs.existsSync(path.join(legacyDir, 'placeholder.key'))) {
-      try { fs.copyFileSync(path.join(legacyDir, 'placeholder.key'), keyFile, fs.constants.COPYFILE_EXCL); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+    const lockDir = path.join(dir, 'placeholder-key.lock');
+    try {
+      fs.mkdirSync(lockDir, { mode: 0o700 });
+    } catch (error) {
+      if (error.code === 'EEXIST') throw new Error('Placeholder key initialization is locked; retry or remove a stale placeholder-key.lock directory');
+      throw error;
     }
-    try { fs.writeFileSync(keyFile, crypto.randomBytes(32), { mode: 0o600, flag: 'wx' }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
-    for (const name of fs.readdirSync(dir)) if (/^placeholder-.*\.tmp$/.test(name)) fs.rmSync(path.join(dir, name), { force: true });
+    try {
+      for (const name of fs.readdirSync(dir)) if (/^placeholder-.*\.tmp$/.test(name)) fs.rmSync(path.join(dir, name), { force: true });
+      if (legacyDir && fs.existsSync(path.join(legacyDir, 'placeholder.key'))) {
+        try { fs.copyFileSync(path.join(legacyDir, 'placeholder.key'), keyFile, fs.constants.COPYFILE_EXCL); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+      }
+      if (!fs.existsSync(keyFile)) {
+        const temporary = path.join(dir, `placeholder-${crypto.randomBytes(16).toString('hex')}.tmp`);
+        try {
+          fs.writeFileSync(temporary, crypto.randomBytes(32), { mode: 0o600, flag: 'wx' });
+          fs.renameSync(temporary, keyFile);
+        } finally {
+          fs.rmSync(temporary, { force: true });
+        }
+      }
+    } finally {
+      fs.rmdirSync(lockDir);
+    }
     const key = fs.readFileSync(keyFile);
     if (key.length !== 32) throw new Error('Invalid placeholder key');
     tokenize = createTokenizer(key);
@@ -168,72 +187,89 @@ const pastedImages = (id, input, found) => {
 };
 
 const main = () => {
-  const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-  const cfg = loadConfig(input.cwd);
-  const id = input.session_id;
+  let input;
   const out = o => process.stdout.write(JSON.stringify(o));
-  switch (input.hook_event_name) {
-    case 'SessionStart':
-      out({ systemMessage: 'AliasChat active: personal data in prompts and tool output is masked before it reaches the model' + (cfg ? (cfg.error ? `. Config ${cfg.file} ignored: ${cfg.error}` : `. Config: ${cfg.file}`) : ''), hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'Tokens shaped like __PII_EMAIL_a1b2c3d4e5f6__ are personal data masked by the AliasChat plugin. Treat them as opaque literals: copy them verbatim into tool inputs, never guess, expand or alter them.' } });
-      break;
-    case 'UserPromptSubmit': {
-      const found = {};
-      const masked = mask(input.prompt, found);
-      const images = pastedImages(id, input, found);
-      if (masked === input.prompt && !images.length) break;
-      save(id, found);
-      if (images.length) {
-        const list = images.map(i => `${i.name}: ${i.count} value${i.count === 1 ? '' : 's'} found, redacted copy at ${i.out}`).join('\n');
+  try {
+    input = JSON.parse(fs.readFileSync(0, 'utf8'));
+    const cfg = loadConfig(input.cwd);
+    const id = input.session_id;
+    switch (input.hook_event_name) {
+      case 'SessionStart':
+        out({ systemMessage: 'AliasChat active: personal data in prompts and tool output is masked before it reaches the model' + (cfg ? (cfg.error ? `. Config ${cfg.file} ignored: ${cfg.error}` : `. Config: ${cfg.file}`) : ''), hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'Tokens shaped like __PII_EMAIL_a1b2c3d4e5f6__ are personal data masked by the AliasChat plugin. Treat them as opaque literals: copy them verbatim into tool inputs, never guess, expand or alter them.' } });
+        break;
+      case 'UserPromptSubmit': {
+        const found = {};
+        const masked = mask(input.prompt, found);
+        const images = pastedImages(id, input, found);
+        if (masked === input.prompt && !images.length) break;
+        save(id, found);
+        if (images.length) {
+          const list = images.map(i => `${i.name}: ${i.count} value${i.count === 1 ? '' : 's'} found, redacted copy at ${i.out}`).join('\n');
+          out({
+            decision: 'block',
+            suppressOriginalPrompt: true,
+            reason: `AliasChat: personal data found in a pasted image, nothing was sent.\n${list}\n\nAttach the redacted copy instead (drag it into the chat) and resend${masked === input.prompt ? '.' : ' with this masked text:\n\n' + masked}`
+          });
+          break;
+        }
+        const copied = process.platform === 'darwin' && spawnSync('pbcopy', { input: masked }).status === 0;
         out({
           decision: 'block',
           suppressOriginalPrompt: true,
-          reason: `AliasChat: personal data found in a pasted image, nothing was sent.\n${list}\n\nAttach the redacted copy instead (drag it into the chat) and resend${masked === input.prompt ? '.' : ' with this masked text:\n\n' + masked}`
+          reason: `AliasChat: personal data found in your prompt, nothing was sent. ${copied ? 'A masked copy is in your clipboard: press Edit prompt, select all, paste, send. In the terminal just paste and send' : 'Resend this masked version'}:\n\n${masked}`
         });
         break;
       }
-      const copied = process.platform === 'darwin' && spawnSync('pbcopy', { input: masked }).status === 0;
-      out({
-        decision: 'block',
-        suppressOriginalPrompt: true,
-        reason: `AliasChat: personal data found in your prompt, nothing was sent. ${copied ? 'A masked copy is in your clipboard: press Edit prompt, select all, paste, send. In the terminal just paste and send' : 'Resend this masked version'}:\n\n${masked}`
-      });
-      break;
-    }
-    case 'PostToolUse': {
-      const found = {};
-      const kind = input.tool_name === 'Read' && input.tool_response && input.tool_response.type;
-      if (kind === 'pdf' || kind === 'image') break;
-      const updated = deepMap(input.tool_response, s => mask(s, found));
-      if (!Object.keys(found).length) break;
-      save(id, found);
-      const n = Object.keys(found).length;
-      out({ systemMessage: `AliasChat: masked ${n} value${n === 1 ? '' : 's'} in ${input.tool_name} output`, hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } });
-      break;
-    }
-    case 'PreToolUse': {
-      const file = input.tool_name === 'Read' && input.tool_input && input.tool_input.file_path;
-      if (file && (/\.pdf$/i.test(file) || IMAGE.test(file)) && !readDirs(id).some(directory => file.startsWith(directory))) {
+      case 'PostToolUse': {
         const found = {};
-        const result = /\.pdf$/i.test(file) ? redirectPdf(id, input, found) : redirectImage(id, input, found);
+        const kind = input.tool_name === 'Read' && input.tool_response && input.tool_response.type;
+        if (kind === 'pdf' || kind === 'image') break;
+        const updated = deepMap(input.tool_response, s => mask(s, found));
+        if (!Object.keys(found).length) break;
         save(id, found);
-        if (result && result.hookSpecificOutput && input.cwd && path.resolve(file).startsWith(path.resolve(input.cwd) + path.sep)) result.hookSpecificOutput.permissionDecision = 'allow';
-        if (result) out(result);
+        const n = Object.keys(found).length;
+        out({ systemMessage: `AliasChat: masked ${n} value${n === 1 ? '' : 's'} in ${input.tool_name} output`, hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } });
         break;
       }
-      if (!hasPlaceholder(JSON.stringify(input.tool_input))) break;
-      const map = load(id);
-      const restored = deepMap(input.tool_input, s => unmask(s, map));
-      const decision = input.permission_mode === 'bypassPermissions' ? { permissionDecision: 'allow' } : {};
-      out({ hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: restored, ...decision } });
-      break;
+      case 'PreToolUse': {
+        const file = input.tool_name === 'Read' && input.tool_input && input.tool_input.file_path;
+        if (file && (/\.pdf$/i.test(file) || IMAGE.test(file)) && !readDirs(id).some(directory => file.startsWith(directory))) {
+          const found = {};
+          const result = /\.pdf$/i.test(file) ? redirectPdf(id, input, found) : redirectImage(id, input, found);
+          save(id, found);
+          if (result && result.hookSpecificOutput && input.cwd && path.resolve(file).startsWith(path.resolve(input.cwd) + path.sep)) result.hookSpecificOutput.permissionDecision = 'allow';
+          if (result) out(result);
+          break;
+        }
+        if (!hasPlaceholder(JSON.stringify(input.tool_input))) break;
+        const map = load(id);
+        const restored = deepMap(input.tool_input, s => unmask(s, map));
+        const decision = input.permission_mode === 'bypassPermissions' ? { permissionDecision: 'allow' } : {};
+        out({ hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: restored, ...decision } });
+        break;
+      }
+      case 'MessageDisplay':
+        if (!hasPlaceholder(input.delta)) break;
+        out({ hookSpecificOutput: { hookEventName: 'MessageDisplay', displayContent: unmask(input.delta, load(id)) } });
+        break;
+      case 'SessionEnd':
+        for (const target of readDirs(id)) fs.rmSync(target, { recursive: true, force: true });
+        prune();
     }
-    case 'MessageDisplay':
-      if (!hasPlaceholder(input.delta)) break;
-      out({ hookSpecificOutput: { hookEventName: 'MessageDisplay', displayContent: unmask(input.delta, load(id)) } });
-      break;
-    case 'SessionEnd':
-      for (const target of readDirs(id)) fs.rmSync(target, { recursive: true, force: true });
-      prune();
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    switch (input && input.hook_event_name) {
+      case 'SessionStart':
+      case 'PostToolUse':
+        out({ systemMessage: `AliasChat error: ${message}. AliasChat did not mask this event.` });
+        break;
+      case 'PreToolUse':
+      case 'MessageDisplay':
+      case 'SessionEnd':
+        break;
+      default:
+        out({ decision: 'block', suppressOriginalPrompt: true, reason: `AliasChat error: ${message}. Your prompt was NOT sent; fix the issue and resend.` });
+    }
   }
 };
 

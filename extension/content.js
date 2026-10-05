@@ -1,5 +1,5 @@
 (() => {
-  const { isChatRequest } = window.piiRewrite;
+  const { isChatRequest, isUploadMetadataRequest } = window.piiRewrite;
   const requestPrefix = [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
   const pending = new Map();
   let token;
@@ -24,7 +24,7 @@
     clearTimeout(request.timer);
     data.error ? request.reject(Object.assign(new Error(data.error), { code: data.code })) : request.resolve(data.result);
   });
-  window.postMessage({ type: 'mask2ai-ready' }, '*');
+  window.postMessage({ type: 'mask2ai-ready' }, location.origin);
   const rpc = (type, payload) => new Promise((resolve, reject) => {
     const id = requestPrefix + ':' + ++sequence;
     const timer = setTimeout(() => {
@@ -33,7 +33,7 @@
     }, 10000);
     pending.set(id, { resolve, reject, timer, type: type.replace('-request', '-result') });
     ready.then(() => {
-      if (pending.has(id)) window.postMessage({ type, token, id, ...payload }, '*');
+      if (pending.has(id)) window.postMessage({ type, token, id, ...payload }, location.origin);
     });
   });
 
@@ -48,7 +48,11 @@
   };
   const failure = error => show(error?.code === 'opaque-blocked'
     ? 'PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them in AliasChat options (allowOpaqueUploads).'
-    : 'could not mask personal data; request blocked', 6000);
+    : error?.code === 'unknown-blocked'
+      ? 'Unsupported file uploads are blocked because they cannot be inspected. You can allow them in AliasChat options (allowUnknownUploads).'
+      : error?.code === 'map-storage-error'
+        ? error.message
+        : 'could not mask personal data; request blocked', 6000);
   document.addEventListener('DOMContentLoaded', () => show('on, personal data is masked before sending', 4000));
 
   const gunzip = bytes => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
@@ -70,7 +74,7 @@
     } else if (body instanceof File) {
       payload = { format: 'file', body: await packFile(body) };
       restore = unpackFile;
-    } else if (isChatRequest(url) && body != null) {
+    } else if ((isChatRequest(url) || isUploadMetadataRequest(url)) && body != null) {
       if (typeof body === 'string') payload = { format: 'chat', body };
       else if (body instanceof URLSearchParams) {
         payload = { format: 'chat', body: body.toString() };
@@ -87,7 +91,7 @@
     }
     if (!payload) return body;
     const result = await rpc('mask-request', payload);
-    for (const name of result.warnings) show(`${name} was uploaded uninspected, PDFs and images are not masked in the browser`, 6000);
+    for (const name of result.warnings) show(name, 6000);
     if (result.count) show(`masked ${result.count} value${result.count === 1 ? '' : 's'} before sending`, 4000);
     return restore(result.body);
   };
@@ -97,7 +101,7 @@
     try {
       const url = input instanceof Request ? input.url : String(input);
       if (init && init.body != null) init = { ...init, body: await maskBody(url, init.body) };
-      else if (input instanceof Request && input.body && isChatRequest(url)) input = new Request(input, { body: await maskBody(url, await input.clone().arrayBuffer()) });
+      else if (input instanceof Request && input.body && (isChatRequest(url) || isUploadMetadataRequest(url))) input = new Request(input, { body: await maskBody(url, await input.clone().arrayBuffer()) });
     } catch (error) {
       failure(error);
       throw error;
@@ -117,7 +121,7 @@
   proto.send = function (body) {
     const state = states.get(this);
     if (!state) return send.call(this, body);
-    const chat = isChatRequest(state.url);
+    const chat = isChatRequest(state.url) || isUploadMetadataRequest(state.url);
     if (!chat && !(body instanceof FormData) && !(body instanceof File)) return send.call(this, body);
     if (!state.async) {
       if (!chat) return send.call(this, body);

@@ -9,6 +9,8 @@
 })();
 
 let maskingKey;
+const MAX_MAP_ENTRIES = 20000;
+let mapQueue = Promise.resolve();
 const getMaskingKey = () => maskingKey ||= (async () => {
   let { privyKey } = await chrome.storage.session.get('privyKey');
   if (!Array.isArray(privyKey) || privyKey.length !== 32) {
@@ -22,7 +24,7 @@ const getMaskingKey = () => maskingKey ||= (async () => {
 });
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id) return;
-  (async () => {
+  const process = async () => {
     if (message?.type === 'privy-map-get') {
       const stored = await chrome.storage.session.get(['aliasMap', 'privyMap']);
       const legacyMap = stored.privyMap && typeof stored.privyMap === 'object' && !Array.isArray(stored.privyMap) ? stored.privyMap : {};
@@ -34,7 +36,14 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     }
     if (message?.type === 'privy-map-set') {
       if (!message.privyMap || typeof message.privyMap !== 'object' || Array.isArray(message.privyMap)) throw new Error('Invalid placeholder map');
-      await chrome.storage.session.set({ aliasMap: message.privyMap });
+      const { aliasMap: current } = await chrome.storage.session.get('aliasMap');
+      const aliasMap = { ...current, ...message.privyMap };
+      const count = Object.keys(aliasMap).length;
+      if (count > MAX_MAP_ENTRIES) {
+        respond({ error: `AliasChat placeholder map is full (${count} entries). Restart the browser to clear it (the map lives in session storage).` });
+        return;
+      }
+      await chrome.storage.session.set({ aliasMap });
       respond({ ok: true });
       return;
     }
@@ -45,6 +54,9 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       return [...bytes.slice(0, 6)].map(n => n.toString(16).padStart(2, '0')).join('');
     }));
     respond({ digests });
-  })().catch(() => respond({ error: 'Could not process private data' }));
+  };
+  const result = message?.type === 'privy-map-get' || message?.type === 'privy-map-set' ? mapQueue.then(process) : process();
+  if (message?.type === 'privy-map-get' || message?.type === 'privy-map-set') mapQueue = result.catch(() => {});
+  result.catch(() => respond({ error: 'Could not process private data' }));
   return true;
 });
