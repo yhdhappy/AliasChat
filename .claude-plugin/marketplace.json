@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "privy-ai",
-  "description": "Personal data masking for Claude Code.",
+  "description": "AliasChat personal data masking for Claude Code.",
   "owner": {
     "name": "Serkan Korkut",
     "url": "https://github.com/serkankorkut"
@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "privy-ai",
-      "description": "Masks personal data before it leaves Claude Code, restores it in tool calls and on screen.",
+      "description": "AliasChat masks personal data before it leaves Claude Code, restores it in tool calls and on screen.",
       "source": "./",
       "category": "security"
     }

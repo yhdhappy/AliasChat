@@ -39,7 +39,7 @@ const frames = fs.mkdtempSync(path.join(os.tmpdir(), 'mask2ai-frames-'));
   await sleep(700);
   for (const type of ['keyDown', 'keyUp']) await b.send('Input.dispatchKeyEvent', { type, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
   await sleep(1500);
-  await caption('2 / 3   PrivyAI replaced them before the message left your browser. This is what ChatGPT actually received:\n\n' + (sentPrompt() || '(request not captured)'));
+  await caption('2 / 3   AliasChat replaced them before the message left your browser. This is what ChatGPT actually received:\n\n' + (sentPrompt() || '(request not captured)'));
   await sleep(+process.env.REPLY_WAIT || 9000);
   await caption('3 / 3   ChatGPT answered without ever seeing the real email or number. On your screen everything looks normal.');
   await sleep(3500);

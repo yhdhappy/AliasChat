@@ -1,4 +1,4 @@
-# Working on PrivyAI
+# Working on AliasChat
 
 Read `docs/HANDOFF.md` first; it has the architecture, the verification commands and the open work.
 

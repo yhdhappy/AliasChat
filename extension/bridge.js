@@ -97,7 +97,7 @@
     if (data.token !== token || data.type !== 'mask-request' || typeof data.id !== 'string') return;
     queue = queue.then(async () => {
       try { window.postMessage({ type: 'mask-result', token, id: data.id, result: await run(data) }, '*'); }
-      catch (error) { window.postMessage({ type: 'mask-result', token, id: data.id, error: 'PrivyAI could not process personal data safely', code: error.code === 'opaque-blocked' ? 'opaque-blocked' : undefined }, '*'); }
+      catch (error) { window.postMessage({ type: 'mask-result', token, id: data.id, error: 'AliasChat could not process personal data safely', code: error.code === 'opaque-blocked' ? 'opaque-blocked' : undefined }, '*'); }
     });
   });
   sendConfig();

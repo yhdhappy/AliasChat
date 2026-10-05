@@ -1,15 +1,15 @@
-# PrivyAI — 项目状态（HANDOFF）
+# AliasChat — 项目状态（HANDOFF）
 
 > 每次让 Codex / pi 干活前先读此文件，干完更新。额度中断后从这里接着来，不许偏离。
 
 ## 项目一句话
-PrivyAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用户消息发往 ChatGPT / Claude 网页版之前，把个人敏感信息替换成占位符，AI 只看到占位符，回答回来后在屏幕上还原真值。目标：免费+付费高级版，卖到国外，达叔的副业目标 $10/天。
+AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用户消息发往 ChatGPT / Claude 网页版之前，把检测到的个人敏感信息替换成占位符，回答回来后在屏幕上还原真值。目标：免费+付费高级版，卖到国外，达叔的副业目标 $10/天。
 
 ## 关键决策（已定，不许擅改）
-- 品牌名：PrivyAI（2026-10-04 达叔亲定；原名 VeilAI，因 Chrome 商店已有直接竞品 Privacy Veil / Veil-it AI Security、GitHub 有 3 个同名项目，2026-10-04 改名）
+- 当前品牌名：AliasChat（2026-10-05 改名；上一个品牌名 PrivyAI，最初名称 VeilAI）
 - Logo：第 1 个方案（盾牌+气泡+面纱），达叔待发原图
 - 基准项目：serkankorkut/mask2ai v0.6.0，MIT（Copyright 2026 Serkan Korkut，LICENSE 必须原样保留）
-- 仓库：github.com/yhdhappy/privyAI（public），47 个提交历史已推送（已滤掉 .github/workflows，因 token 无 workflow 权限）
+- 仓库：github.com/yhdhappy/AliasChat（public；当前 GitHub API 将仓库报告为 AliasChat，push 继续使用工作区配置的 origin）
 - 变现：免费核心 + Pro（团队策略包、审计日志、更多站点、文件脱敏），Gumroad 起手 $5 一次性
 - 节奏：边做边接单（达叔每天分 2-3 小时 Fiverr 保底）
 - 英文：产品文案/客服邮件由 Muse 写，达叔读写可以、口语不行
@@ -21,7 +21,7 @@ PrivyAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用
 - [x] Phase 1：品牌重命名 mask2ai→PrivyAI + 去 Turkish（2026-10-04 上午，Codex gpt-6-luna 执行，pi deepseek-v4.1-flash 审查 FAIL→修完 7 项→PASS）
   - 改名：manifest/README/store listing/options.html/content.js toast/hooks/plugin.json/marketplace.json/demo 脚本；插件统一 kebab-case 身份 `privy-ai`；LICENSE 未动
   - 去 Turkish：删 TCKN 校验+模式、PLATE、土耳其地址/DOB/证件/姓名线索、FOLD 字符映射、土耳其手机号格式；保留 `\b0\d{4} ?\d{6}\b`（实为英国手机号，测试要求）
-  - 刻意保留的内部标识（兼容性）：MASK2AI_CONFIG、`~/.mask2ai/config.json`、`.mask2ai.json`、`data-mask2ai`、`mask2ai-config` postMessage、`~/.claude/privyAI`（已改名）、JS 命名空间
+  - 刻意保留的旧配置入口和内部标识（兼容性）：MASK2AI_CONFIG、`~/.mask2ai/config.json`、`.mask2ai.json`、`data-mask2ai`、`mask2ai-config` postMessage、CLI 插件 ID `privy-ai`、JS 命名空间
   - `npm test` 通过（ok / office ok）
 - [x] Phase 1b：安全修复（2026-10-04 上午，Codex gpt-6.1-sol 执行，pi deepseek-v4.1-flash 审查 PASS，3 处小问题已修）
   - 修了 8 项：同名二次遮蔽、中国手机号/身份证/银联卡识别、postMessage token 加固、出错拦下不放行、占位符 12 位+每会话盐、对照表搬进插件隔离区、自定义正则安检、XHR 拦截
@@ -74,7 +74,7 @@ PrivyAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用
 
 5. **GitHub Pages 开通（已完成）**
    - 已开启：main 分支的 docs 文件夹。
-   - 目的：让 `https://yhdhappy.github.io/PrivyAI/privacy.html` 生效（商店隐私政策 URL 用）。
+   - 目的：让 `https://yhdhappy.github.io/AliasChat/privacy.html` 生效（商店隐私政策 URL 用）。
 
 ### 战略备忘（2026-10-04 达叔定）
 6. **目标市场 = 海外英文用户，不指望国内**
@@ -103,7 +103,7 @@ PrivyAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用
 
 ## 上架前收尾（2026-10-04，0.7.0）
 
-- 隐私政策链接统一为 `https://yhdhappy.github.io/PrivyAI/privacy.html`，Pages 已开启。
+- 当时隐私政策链接使用 PrivyAI 的 Pages 路径；AliasChat 改名后链接已改为 `https://yhdhappy.github.io/AliasChat/privacy.html`。
 - 版本统一为 0.7.0；当时补充的 `extension/manifest.json` 副本现已删除，根目录 `manifest.json` 是唯一清单。
 - PDF/图片默认拦截通过 `opaque-blocked` 错误码显示专用提示；options 说明允许上传的方法和文件不会被遮蔽的风险。
 - 删除页面 `map-clear` 接口；映射继续保存在 `chrome.storage.session`，页面消息不能清除映射。
@@ -129,3 +129,12 @@ PrivyAI = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在用
 - CLI 密钥文件用 `writeFileSync` 的 `wx` 原子创建，读取并复用已存在密钥，清理残留 `.tmp`；目录创建统一收敛到 `ensureDir` 并设为 `0700`。
 - 补充相邻邮箱、单趟处理、更新轮换、导入重试、密钥长度、临时文件清理、目录权限、HMAC 不可导出及 runtime 消息体密钥隔离测试。`npm test` 通过（ok / office ok / security ok）；manifest/package 版本仍为 0.7.0。
 - 九个单独提交在 `/tmp/privyai-review-fixes`，bundle 在 `/tmp/privyai-review-fixes.bundle`。工作区 `.git` 只读；`git push origin main` 因沙箱代理无法连接失败，GitHub connector 的写入调用被自动审批拒绝（approval policy 为 never），因此尚未推送。
+
+## AliasChat 品牌改名（2026-10-05）
+
+- 浏览器扩展名称、商店文案、README、`docs/`、CLI 提示、欢迎页和设置页统一使用 AliasChat；版本仍为 0.7.0。
+- extension session key 从 `privyMap` 迁移到 `aliasMap`。旧 key 存在时首次读取会合并并复制到新 key；更新处理不会主动清空 map，并轮换 HMAC key。Chrome 自身会在扩展更新或重载时清空 `storage.session`，所以该迁移只能读取仍留在 session storage 中的旧 map。
+- 新 CLI 数据写入 `~/.claude/aliaschat/`；读取旧 `~/.claude/privyAI/` 的映射和 placeholder key。原有配置入口 `MASK2AI_CONFIG`、`.mask2ai.json`、`~/.mask2ai/config.json` 与 Claude 插件 ID `privy-ai` 继续支持。
+- 仓库链接和隐私政策链接指向 AliasChat；工作区 `origin` 当前指向 AliasChat URL。本次推送受沙箱网络和 MCP 写入审批限制，临时克隆中的提交及 bundle 路径记录在交接更新末尾。
+- 验证：`npm test` 通过（ok / office ok / security ok）；未运行 `demo/verify-web.js`，沙箱 Chromium 启动会崩溃。
+- 提交在 `/tmp/aliaschat-rename` 可写临时克隆创建；bundle 保存为 `/tmp/aliaschat-rename.bundle`。push 因沙箱代理不可达失败，GitHub MCP 对 blob 写入返回“requires approval, but approval policy is never”。

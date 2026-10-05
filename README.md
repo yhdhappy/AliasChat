@@ -1,15 +1,15 @@
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="brand/logo-dark.svg"><img src="brand/logo.svg" width="280" alt="PrivyAI"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="brand/logo-dark.svg"><img src="brand/logo.svg" width="280" alt="AliasChat"></picture></p>
 
-# PrivyAI
+# AliasChat
 
-[![Release](https://img.shields.io/github/v/release/yhdhappy/privyAI?style=flat-square&color=7c3aed)](https://github.com/yhdhappy/privyAI/releases/latest)
-[![Tests](https://img.shields.io/github/actions/workflow/status/yhdhappy/privyAI/test.yml?style=flat-square&label=tests)](https://github.com/yhdhappy/privyAI/actions/workflows/test.yml)
-[![License](https://img.shields.io/github/license/yhdhappy/privyAI?style=flat-square)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/yhdhappy/privyAI?style=flat-square)](https://github.com/yhdhappy/privyAI/stargazers)
+[![Release](https://img.shields.io/github/v/release/yhdhappy/AliasChat?style=flat-square&color=7c3aed)](https://github.com/yhdhappy/AliasChat/releases/latest)
+[![Tests](https://img.shields.io/github/actions/workflow/status/yhdhappy/AliasChat/test.yml?style=flat-square&label=tests)](https://github.com/yhdhappy/AliasChat/actions/workflows/test.yml)
+[![License](https://img.shields.io/github/license/yhdhappy/AliasChat?style=flat-square)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/yhdhappy/AliasChat?style=flat-square)](https://github.com/yhdhappy/AliasChat/stargazers)
 
-Protects your privacy when you use AI. PrivyAI replaces the personal data it detects when you work with an AI assistant. It detects names, contact details, identity numbers, payment details and addresses in what you send, replaces detected values with placeholders in supported outgoing messages, and puts the real values back on your screen.
+Protects your privacy when you use AI. AliasChat replaces the personal data it detects when you work with an AI assistant. It detects names, contact details, identity numbers, payment details and addresses in what you send, replaces detected values with placeholders in supported outgoing messages, and puts the real values back on your screen.
 
-Project and docs: [github.com/yhdhappy/privyAI](https://github.com/yhdhappy/privyAI)
+Project and docs: [github.com/yhdhappy/AliasChat](https://github.com/yhdhappy/AliasChat)
 
 Two integrations share one detection core:
 
@@ -23,23 +23,23 @@ Two integrations share one detection core:
 
 ### Claude Code
 
-![PrivyAI in Claude Code](demo/claude-code.gif)
+![AliasChat in Claude Code](demo/claude-code.gif)
 
 The real Claude Code terminal with the plugin loaded. The first prompt is blocked and a masked copy is offered. The masked prompt goes through, Claude reads a CSV, the plugin masks 13 values in the tool output before the model sees it, and the model's reply comes back with placeholders that the plugin restores on screen. The model replies in this recording come from `demo/fake-api.js`, a local stand-in for the Anthropic API, so the recording does not depend on an account. The CLI, the hooks and the masking are real.
 
 ### Files in Claude Code
 
-![PrivyAI converting a PDF and redacting an image in Claude Code](demo/claude-code-files.gif)
+![AliasChat converting a PDF and redacting an image in Claude Code](demo/claude-code-files.gif)
 
 One prompt reads the sample PDF and the sample image. The PDF read is redirected to a masked text extraction, the image read to a redacted copy, and the reply shows what the model was given. The values in the reply are placeholders restored on screen.
 
-![demo/customer.png before and after PrivyAI: the name, email, phone and SSN are blacked out in the copy Claude Code reads](demo/image-before-after.png)
+![demo/customer.png before and after AliasChat: the name, email, phone and SSN are blacked out in the copy Claude Code reads](demo/image-before-after.png)
 
 The redacted copy is real output: `demo/customer-redacted.png` is what the Read tool received in the recording above. Words that match personal data are found by Apple Vision OCR and blacked out in the pixels. The original file is untouched.
 
 ### ChatGPT web
 
-![PrivyAI on chatgpt.com](demo/chatgpt-web.gif)
+![AliasChat on chatgpt.com](demo/chatgpt-web.gif)
 
 A real chat on chatgpt.com in Chrome with the extension loaded. The purple captions are added by the recorder. The text under "what ChatGPT actually received" is the `prompt` field captured from the outgoing request.
 
@@ -92,11 +92,13 @@ flowchart LR
     Map <-.-> UPS
 ```
 
-Everything left of the API runs on your machine. PrivyAI replaces the personal data it detects in supported requests; undetected values can still reach the API. In the browser detection runs in the extension's isolated world: the outgoing chat request is rewritten before it is sent, and placeholders in the rendered page are swapped back to the real values.
+Everything left of the API runs on your machine. AliasChat replaces the personal data it detects in supported requests; undetected values can still reach the API. In the browser detection runs in the extension's isolated world: the outgoing chat request is rewritten before it is sent, and placeholders in the rendered page are swapped back to the real values.
 
 ## Install
 
 ### Claude Code
+
+The Claude Code plugin keeps its existing `privy-ai` ID so current installs and commands remain compatible.
 
 ```
 /plugin install privy-ai --marketplace yhdhappy/privyAI
@@ -112,16 +114,16 @@ Claude Code asks you to confirm the marketplace source, then to pick a scope. On
 Choose the user scope to cover every project. Requires Node.js 18 or newer on `PATH`. To try a checkout without installing:
 
 ```
-claude --plugin-dir /path/to/privyAI
+claude --plugin-dir /path/to/AliasChat
 ```
 
 ### claude.ai and ChatGPT in Chrome
 
-1. Clone this repository, or download `privyAI-extension-<version>.zip` from the [latest release](https://github.com/yhdhappy/privyAI/releases/latest) and unzip it.
+1. Clone this repository, or download `aliaschat-extension-<version>.zip` from the [latest release](https://github.com/yhdhappy/AliasChat/releases/latest) and unzip it.
 2. Open `chrome://extensions`, enable Developer mode, choose Load unpacked and select the repository folder. The `manifest.json` at the root is the extension. Chrome 111 or newer is required.
-3. Open claude.ai or chatgpt.com. A "PrivyAI: on" toast confirms the extension is active.
+3. Open claude.ai or chatgpt.com. An "AliasChat: on" toast confirms the extension is active.
 
-After changing the extension files, click the Reload icon on the PrivyAI card in `chrome://extensions`. The version shown on the card comes from `manifest.json`; if it does not match the file, Chrome is still running the old build.
+After changing the extension files, click the Reload icon on the AliasChat card in `chrome://extensions`. The version shown on the card comes from `manifest.json`; if it does not match the file, Chrome is still running the old build.
 
 **First test.** Open a new chat and send a message with made-up data, for example:
 
@@ -129,16 +131,16 @@ After changing the extension files, click the Reload icon on the PrivyAI card in
 Write a short note to jane.doe@example.com confirming her phone +1 555 555 5555 and SSN 111-11-1111.
 ```
 
-Expected: a toast "PrivyAI: masked 3 values before sending" appears bottom right, your message bubble shows the values you typed, and the reply is written around placeholders the assistant received, shown to you with the real values. To see what actually left the browser, open DevTools, Network, select the `completion` or `conversation` request and look at its payload.
+Expected: a toast "AliasChat: masked 3 values before sending" appears bottom right, your message bubble shows the values you typed, and the reply is written around placeholders the assistant received, shown to you with the real values. To see what actually left the browser, open DevTools, Network, select the `completion` or `conversation` request and look at its payload.
 
 ## What you will see
 
 **In Claude Code**
 
-- At session start: "PrivyAI active: personal data in prompts and tool output is masked before it reaches the model".
+- At session start: "AliasChat active: personal data in prompts and tool output is masked before it reaches the model".
 - When a prompt contains personal data: the prompt is blocked before it is sent and the masked copy is shown. On macOS the masked copy is also placed in the clipboard. Paste it and send.
 - When an image pasted into the prompt contains personal data: the prompt is blocked, the message names a redacted copy of the image, and you attach that copy instead. An image cannot be swapped inside a prompt the way a file read can, so this is a block rather than a silent fix.
-- After a tool result is masked: "PrivyAI: masked N values in Read output" under the tool call.
+- After a tool result is masked: "AliasChat: masked N values in Read output" under the tool call.
 - When Claude edits a file or runs a command that contains a placeholder, the real value is restored before the tool runs, so edits match and commands work.
 - When Claude's reply contains a placeholder, the real value is shown on screen. The transcript keeps the placeholder.
 
@@ -165,9 +167,9 @@ Everything is on by default. One JSON object turns detector types off, adds your
 | `extra` | Your own detectors: a `type` name that becomes the placeholder label and a JavaScript regular expression in `pattern`, with optional `flags`. Matches are masked and restored like everything else. |
 | `allow` | Exact values that are never masked, such as a shared support address. |
 
-**Claude Code** reads, in this order, the file named in `MASK2AI_CONFIG`, then `.mask2ai.json` in the working directory, then `~/.mask2ai/config.json`. The first one found wins and the session start line names it. A file that does not parse is ignored and the line says so.
+**Claude Code** reads, in this order, the file named in `MASK2AI_CONFIG`, then `.mask2ai.json` in the working directory, then `~/.mask2ai/config.json`. These existing entry points remain supported. New session data is stored in `~/.claude/aliaschat/`; existing maps and the placeholder key in `~/.claude/privyAI/` are read for compatibility. The first config file found wins and the session start line names it. A file that does not parse is ignored and the line says so.
 
-**Chrome**: right-click the PrivyAI icon, choose Options, paste the JSON and save. It is kept in Chrome storage and applies after the tab reloads.
+**Chrome**: right-click the AliasChat icon, choose Options, paste the JSON and save. It is kept in Chrome storage and applies after the tab reloads.
 
 ## Verify
 
@@ -213,19 +215,19 @@ If you prefer your own instrument, point `ANTHROPIC_BASE_URL` at a logging proxy
 - `SessionStart` returns a status line for the user and one line of context telling the model that `__PII_*__` tokens are opaque literals to copy verbatim.
 - `SessionEnd` removes the session's converted file copies and prunes placeholder maps older than 30 days. The map itself is kept, because the desktop app ends and resumes sessions freely and a placeholder from before a resume must still restore.
 
-**Detection is an ordered pattern list** in `core/pii.js`. Each entry is a type, a regular expression and an optional validator. Emails run first so their digits are not later read as phones; cards and IBANs run before phones for the same reason. Label, title and cue patterns capture only the value, and a shape check rejects values such as `name: PrivyAI` or `address: 0x7fff`. Generic labels such as `name:` or `owner:` only match two or more capitalised words, so `"name": "Bash"` in JSON or `owner: Docker` in config files is left alone; `firstName:` and `surname:` still take a single word. After the static pass, the local part of every masked email is split into tokens, and each token is masked where it appears capitalised or in capitals, which is how `jane.doe@` also hides `Jane` and `DOE` in a CSV column.
+**Detection is an ordered pattern list** in `core/pii.js`. Each entry is a type, a regular expression and an optional validator. Emails run first so their digits are not later read as phones; cards and IBANs run before phones for the same reason. Label, title and cue patterns capture only the value, and a shape check rejects values such as `name: AliasChat` or `address: 0x7fff`. Generic labels such as `name:` or `owner:` only match two or more capitalised words, so `"name": "Bash"` in JSON or `owner: Docker` in config files is left alone; `firstName:` and `surname:` still take a single word. After the static pass, the local part of every masked email is split into tokens, and each token is masked where it appears capitalised or in capitals, which is how `jane.doe@` also hides `Jane` and `DOE` in a CSV column.
 
 **Placeholders use a private key.** A value becomes `__PII_<TYPE>_<12 hex digits of HMAC-SHA-256>__`. Hooks use a random 256-bit key in a local file created with mode `0600`; the same key keeps placeholders stable across hook processes and resumed sessions. Standalone Node calls use a random process key unless a private tokenizer is supplied. The extension generates its key in the background service worker and keeps it in chrome.storage.session; the key never goes through page messages. Old six-digit and twelve-digit placeholders can still be restored from their maps. Underscores keep the token a single word for the model and harmless inside code.
 
 **The map is a local append-only file.** Placeholder to value pairs are appended as JSON lines to `$CLAUDE_PLUGIN_DATA/<session_id>.jsonl`, created with mode `0600`. Small appends are atomic on POSIX, so parallel tool calls never lose an entry. Maps are kept for 30 days so resumed sessions can still restore, then pruned.
 
-**The extension** (`manifest.json`, `extension/`) wraps `window.fetch` and asynchronous `XMLHttpRequest` at `document_start`. The detection core runs with `bridge.js` in the extension's isolated world, and the placeholder map is stored in chrome.storage.session. The page wrapper requests masking through a token-bearing `postMessage` protocol; there is no page-callable restoration interface. The bridge obtains keyed digests through extension runtime messages to the background service worker. Only the first config handshake is accepted; page scripts can still observe the token, preempt that handshake or forge operation messages, so this protocol is not an authentication boundary. For requests to the chat endpoints it decodes the body, whether a JSON string, a form body, a byte array or a gzip-compressed byte array, masks the text fields (`prompt`, `parts`, `extracted_content`, `text`, `content`), re-encodes it in the original form and forwards it. A `MutationObserver` in the isolated world restores placeholders in rendered text, skipping editable fields. XHR responses retain placeholders. Isolation protects the stored map and key, but website scripts can read real values after they are restored into the DOM. Masking errors block the request and show a PrivyAI toast; restoration errors leave placeholders intact. Custom regex patterns are checked in a terminable worker against 2000-character stress inputs with a 100ms limit before saving. This timing check cannot prove a pattern safe for every possible input.
+**The extension** (`manifest.json`, `extension/`) wraps `window.fetch` and asynchronous `XMLHttpRequest` at `document_start`. The detection core runs with `bridge.js` in the extension's isolated world, and the placeholder map is stored in chrome.storage.session. When the legacy `privyMap` key is present, the service worker copies its entries to `aliasMap` before using the map. Chrome clears session storage when an extension is updated or reloaded, so maps do not survive those lifecycle events. The page wrapper requests masking through a token-bearing `postMessage` protocol; there is no page-callable restoration interface. The bridge obtains keyed digests through extension runtime messages to the background service worker. Only the first config handshake is accepted; page scripts can still observe the token, preempt that handshake or forge operation messages, so this protocol is not an authentication boundary. For requests to the chat endpoints it decodes the body, whether a JSON string, a form body, a byte array or a gzip-compressed byte array, masks the text fields (`prompt`, `parts`, `extracted_content`, `text`, `content`), re-encodes it in the original form and forwards it. A `MutationObserver` in the isolated world restores placeholders in rendered text, skipping editable fields. XHR responses retain placeholders. Isolation protects the stored map and key, but website scripts can read real values after they are restored into the DOM. Masking errors block the request and show an AliasChat toast; restoration errors leave placeholders intact. Custom regex patterns are checked in a terminable worker against 2000-character stress inputs with a 100ms limit before saving. This timing check cannot prove a pattern safe for every possible input.
 
 **What still leaves the machine.** Placeholders, everything the patterns do not recognise, file paths, and your prompt once you resend it in masked form.
 
 ## Chrome Web Store
 
-`scripts/pack-extension.sh` builds `dist/privyAI-extension-<version>.zip` containing only the files the extension needs. `store/listing.md` holds the listing text, permissions justification, privacy answers and the submission steps.
+`scripts/pack-extension.sh` builds `dist/aliaschat-extension-<version>.zip` containing only the files the extension needs. `store/listing.md` holds the listing text, permissions justification, privacy answers and the submission steps.
 
 ## Development
 
@@ -252,7 +254,7 @@ node demo/chrome-open.js https://chatgpt.com/
 node demo/record-live.js chatgpt.com "<your message>" demo/chatgpt-web.gif
 ```
 
-The project repository is [github.com/yhdhappy/privyAI](https://github.com/yhdhappy/privyAI).
+The project repository is [github.com/yhdhappy/AliasChat](https://github.com/yhdhappy/AliasChat).
 
 ## Continuing the work
 

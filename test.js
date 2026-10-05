@@ -26,7 +26,7 @@ assert.strictEqual(mask(text, {}), masked);
 
 const pii = [
   "Dr. Jane Smith will call.\nname: John Smith\n\"firstName\": \"Veli\"\naddress: 123 Main St, Springfield, IL 62704\nmail ali.yilmaz@x.com, Ali Yilmaz signed, cc ALI YILMAZ.",
-  "name: PrivyAI\nversion: 1.2.3\nusername: serkan\naddress: 0x7fffdeadbeef\nhostname: Claude Code\nSee 42 Ways To Go\nBind address: 192.168.1.10"
+  "name: AliasChat\nversion: 1.2.3\nusername: serkan\naddress: 0x7fffdeadbeef\nhostname: Claude Code\nSee 42 Ways To Go\nBind address: 192.168.1.10"
 ];
 const f2 = {};
 const m2 = mask(pii[0], f2);
@@ -141,17 +141,17 @@ assert(!mask("Dr. Jane Doe", {}).includes("Jane Doe"));
 const data = fs.mkdtempSync(path.join(os.tmpdir(), 'mask2ai-'));
 const hookSource = fs.readFileSync(path.join(__dirname, 'hooks/mask.js'), 'utf8');
 const hookRequire = require('module').createRequire(path.join(__dirname, 'hooks/mask.js'));
-const run = (input, pluginData = data) => {
+const run = (input, pluginData = data, home) => {
   let output = '';
   const hookModule = {};
   const inputText = JSON.stringify({ session_id: 's1', ...input });
-  const isolatedRequire = name => name === 'fs' ? { ...fs, readFileSync: (file, ...args) => file === 0 ? inputText : fs.readFileSync(file, ...args) } : hookRequire(name);
+  const isolatedRequire = name => name === 'fs' ? { ...fs, readFileSync: (file, ...args) => file === 0 ? inputText : fs.readFileSync(file, ...args) } : name === 'os' && home ? { ...os, homedir: () => home } : hookRequire(name);
   isolatedRequire.main = hookModule;
   require('vm').runInNewContext(hookSource, {
     require: isolatedRequire,
     module: hookModule,
     __dirname: path.join(__dirname, 'hooks'),
-    process: { env: { CLAUDE_PLUGIN_DATA: pluginData, PATH: '' }, platform: process.platform, stdout: { write: text => { output += text; } } }
+    process: { env: { ...(pluginData ? { CLAUDE_PLUGIN_DATA: pluginData } : {}), PATH: '' }, platform: process.platform, stdout: { write: text => { output += text; } } }
   }, { filename: 'hooks/mask.js', timeout: 10000 });
   return output ? JSON.parse(output) : null;
 };
@@ -181,9 +181,21 @@ const post = run({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_respo
 const ph = post.hookSpecificOutput.updatedToolOutput.stdout.trim().split(' ')[1];
 assert(/^__PII_EMAIL_[0-9a-f]{12}__$/.test(ph), ph);
 assert.deepStrictEqual(Object.keys(post.hookSpecificOutput.updatedToolOutput), ['stdout', 'stderr', 'interrupted', 'isImage']);
-assert.strictEqual(post.systemMessage, 'PrivyAI: masked 1 value in Bash output');
-assert(run({ hook_event_name: 'SessionStart', source: 'startup' }).systemMessage.startsWith('PrivyAI active'));
+assert.strictEqual(post.systemMessage, 'AliasChat: masked 1 value in Bash output');
+assert(run({ hook_event_name: 'SessionStart', source: 'startup' }).systemMessage.startsWith('AliasChat active'));
 assert.strictEqual(run({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_response: { stdout: 'clean\n', stderr: '' } }), null);
+
+const compatibilityHome = fs.mkdtempSync(path.join(os.tmpdir(), 'aliaschat-home-'));
+const oldData = path.join(compatibilityHome, '.claude', 'privyAI');
+fs.mkdirSync(oldData, { recursive: true });
+fs.writeFileSync(path.join(oldData, 'placeholder.key'), Buffer.alloc(32, 7));
+fs.writeFileSync(path.join(oldData, 's1.jsonl'), JSON.stringify({ p: '__PII_EMAIL_abcdef__', v: 'legacy@example.com' }) + '\n');
+assert.strictEqual(run({ hook_event_name: 'MessageDisplay', delta: 'Email __PII_EMAIL_abcdef__' }, null, compatibilityHome).hookSpecificOutput.displayContent, 'Email legacy@example.com');
+const aliasData = path.join(compatibilityHome, '.claude', 'aliaschat');
+const aliasMapResult = run({ hook_event_name: 'UserPromptSubmit', prompt: 'email next@example.com' }, null, compatibilityHome);
+const aliasPlaceholder = aliasMapResult.reason.match(/__PII_EMAIL_[0-9a-f]{12}__/)[0];
+assert.strictEqual(aliasPlaceholder, '__PII_EMAIL_' + require('crypto').createHmac('sha256', Buffer.alloc(32, 7)).update('next@example.com').digest('hex').slice(0, 12) + '__');
+assert.deepStrictEqual([...fs.readFileSync(path.join(aliasData, 'placeholder.key'))], [...Buffer.alloc(32, 7)], 'The AliasChat directory must keep using the legacy placeholder key');
 
 assert.strictEqual(run({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'ls' } }), null);
 const pre = run({ hook_event_name: 'PreToolUse', tool_name: 'Edit', tool_input: { file_path: '/x', old_string: `owner: ${ph}`, new_string: 'owner: none' } });

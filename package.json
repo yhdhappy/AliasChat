@@ -1,5 +1,5 @@
 {
-  "name": "privy-ai",
+  "name": "aliaschat",
   "version": "0.7.0",
   "description": "Masks personal data before it reaches an AI assistant. Claude Code plugin and Chrome extension for claude.ai and ChatGPT.",
   "private": true,

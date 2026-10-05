@@ -170,7 +170,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   }, MutationObserver: class { constructor(fn) { observer = fn; } observe() {} } });
   let workerListener;
   let importFailures = failFirstImport ? 1 : 0;
-  const session = { get: async key => ({ [key]: sessionStore[key] }), set: async obj => { Object.assign(sessionStore, structuredClone(obj)); }, setAccessLevel: async () => {}, clear: async () => { for (const key of Object.keys(sessionStore)) delete sessionStore[key]; } };
+  const session = { get: async key => typeof key === 'string' ? ({ [key]: sessionStore[key] }) : Object.fromEntries(key.map(name => [name, sessionStore[name]])), set: async obj => { Object.assign(sessionStore, structuredClone(obj)); }, remove: async keys => { for (const key of Array.isArray(keys) ? keys : [keys]) delete sessionStore[key]; }, setAccessLevel: async () => {}, clear: async () => { for (const key of Object.keys(sessionStore)) delete sessionStore[key]; } };
   const restartBackground = () => vm.runInNewContext(fs.readFileSync('extension/background.js', 'utf8'), {
     crypto: {
       getRandomValues: webcrypto.getRandomValues.bind(webcrypto),
@@ -209,7 +209,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
 
 (async () => {
   await runFile('sh', ['scripts/pack-extension.sh']);
-  const archive = `dist/privyAI-extension-${manifest.version}.zip`;
+  const archive = `dist/aliaschat-extension-${manifest.version}.zip`;
   const archiveFiles = (await runFile('unzip', ['-Z1', archive])).stdout.trim().split('\n');
   for (const file of ['extension/background.js', 'extension/welcome.html', 'extension/welcome.js']) {
     assert(archiveFiles.includes(file), `Extension archive must include ${file}`);
@@ -246,11 +246,15 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   assert.strictEqual(cleanExt.bridgeMaskCalls - callsBeforeClean, 1, 'A clean body should be masked in one pass');
   const updateProbe = extension();
   await updateProbe.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact first@example.com' }) });
+  delete updateProbe.sessionStore.aliasMap;
+  updateProbe.sessionStore.privyMap = { __PII_EMAIL_abcdef__: 'saved@example.com' };
   const installedKey = [...updateProbe.sessionStore.privyKey];
   await updateProbe.installed({ reason: 'update' });
+  assert.deepStrictEqual(updateProbe.sessionStore.privyMap, { __PII_EMAIL_abcdef__: 'saved@example.com' }, 'An update must keep the legacy placeholder map available for migration');
   await updateProbe.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact first@example.com' }) });
+  assert.strictEqual(updateProbe.sessionStore.aliasMap.__PII_EMAIL_abcdef__, 'saved@example.com', 'Legacy placeholder maps must migrate to the AliasChat storage key');
   assert.strictEqual(updateProbe.sessionStore.privyKey.length, 32, 'An update must save the replacement key to session storage');
-  assert.notDeepStrictEqual(updateProbe.sessionStore.privyKey, installedKey, 'An update must rotate the key after clearing session storage');
+  assert.notDeepStrictEqual(updateProbe.sessionStore.privyKey, installedKey, 'An update must rotate the masking key');
   const retryWorker = extension({}, {}, false, true);
   await assert.rejects(retryWorker.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact retry@example.com' }) }));
   await retryWorker.page.fetch(url, { method: 'POST', body: JSON.stringify({ prompt: 'contact retry@example.com' }) });
@@ -289,8 +293,8 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   const freshSession = extension();
   await freshSession.page.fetch(url, { method: 'POST', body });
   assert.notStrictEqual(freshSession.requests[0].init.body, wire);
-  ext.sessionStore.privyMap.__PII_EMAIL_abcdef__ = 'legacy@example.com';
-  ext.sessionStore.privyMap.__PII_EMAIL_abcdef123456__ = 'old@example.com';
+  ext.sessionStore.aliasMap.__PII_EMAIL_abcdef__ = 'legacy@example.com';
+  ext.sessionStore.aliasMap.__PII_EMAIL_abcdef123456__ = 'old@example.com';
   const legacyNode = { nodeType: 3, data: '__PII_EMAIL_abcdef__ __PII_EMAIL_abcdef123456__', parentElement: { closest: () => null } };
   await refreshed.mutate([{ type: 'characterData', target: legacyNode, addedNodes: [] }]);
   assert.strictEqual(legacyNode.data, 'legacy@example.com old@example.com');
@@ -387,7 +391,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   const requestCount = ext.requests.length;
   await assert.rejects(ext.page.fetch(url, { method: 'POST', body: '{invalid json' }));
   assert.strictEqual(ext.requests.length, requestCount);
-  assert(ext.toasts.includes('🛡 PrivyAI: could not mask personal data; request blocked'));
+  assert(ext.toasts.includes('🛡 AliasChat: could not mask personal data; request blocked'));
   const malformedForm = 'payload=' + encodeURIComponent('{"prompt":"jane.doe@example.com"}');
   const badConfig = extension({ extra: [{ pattern: '[' }] });
   await assert.rejects(badConfig.page.fetch(url, { method: 'POST', body: malformedForm }));
@@ -399,7 +403,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   failedXhr.send(body);
   await until(() => failed);
   assert.strictEqual(badConfig.requests.length, 0);
-  const opaqueToast = '🛡 PrivyAI: PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them in PrivyAI options (allowOpaqueUploads).';
+  const opaqueToast = '🛡 AliasChat: PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them in AliasChat options (allowOpaqueUploads).';
   const blockedUpload = extension();
   const pdf = new File(['%PDF-1.7'], 'private.pdf', { type: 'application/pdf' });
   const pdfForm = new FormData();

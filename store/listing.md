@@ -2,7 +2,7 @@
 
 ## Name
 
-PrivyAI
+AliasChat
 
 ## Summary (132 characters max)
 
@@ -10,9 +10,9 @@ Masks names, emails, phone, card and ID numbers before your message reaches clau
 
 ## Description
 
-Data handling: PrivyAI processes your chat messages locally in your browser to find and mask personal data. No data is sent to any server. The placeholder map lives in session storage (in-memory, cleared when you close the browser) and cannot be accessed by web pages. Optional settings sync via your own browser account. No analytics or telemetry.
+Data handling: AliasChat processes your chat messages locally in your browser to find and mask personal data. No data is sent to any server. The placeholder map lives in session storage (cleared when you close the browser) and cannot be accessed by web pages. Optional settings sync via your own browser account. No analytics or telemetry.
 
-PrivyAI keeps personal data on your machine when you talk to an AI.
+AliasChat keeps personal data on your machine when you talk to an AI.
 
 Before a message leaves claude.ai or chatgpt.com, the extension finds email addresses, phone numbers, payment cards, IBANs, national ID and social security numbers, dates of birth, names and street addresses in it and replaces each detected value with a placeholder. The reply comes back with the same placeholders and the page shows you the real values.
 
@@ -21,17 +21,17 @@ Before a message leaves claude.ai or chatgpt.com, the extension finds email addr
 - Card numbers are Luhn-checked and IBANs mod-97-checked, so timestamps and version numbers are left alone.
 - Detectors target common English-language labels and formats.
 - The placeholder map is stored in the browser's session storage (cleared when the browser closes) and is never sent anywhere.
-- Open source, MIT: https://github.com/yhdhappy/privyAI
+- Open source, MIT: https://github.com/yhdhappy/AliasChat
 
 Not affiliated with OpenAI or Anthropic.
 
 ## Limitations
 
-Detection is pattern based. It replaces the personal data it detects, but it cannot guarantee all personal data is caught. A bare name in free text with no title, label or matching email nearby is not detected. PDF and image uploads are blocked by default because their contents cannot be inspected in the browser (you can allow them in the options). Full list of what is and is not caught: https://github.com/yhdhappy/privyAI
+Detection is pattern based. It replaces the personal data it detects, but it cannot guarantee all personal data is caught. A bare name in free text with no title, label or matching email nearby is not detected. PDF and image uploads are blocked by default because their contents cannot be inspected in the browser (you can allow them in the options). Full list of what is and is not caught: https://github.com/yhdhappy/AliasChat
 
 ## Single purpose
 
-PrivyAI replaces personal data in messages sent to claude.ai and ChatGPT with placeholders, and restores the real values on screen.
+AliasChat replaces detected personal data in messages sent to claude.ai and ChatGPT with placeholders, and restores the real values on screen.
 
 ## Category
 
@@ -59,7 +59,7 @@ Justification for each: processed only inside the open tab to find and replace p
 Tick all three certifications: not sold to third parties, not used for purposes unrelated to the single purpose, not used for creditworthiness or lending.
 
 - No remote code. All scripts are packaged.
-- Privacy policy URL: https://yhdhappy.github.io/PrivyAI/privacy.html
+- Privacy policy URL: https://yhdhappy.github.io/AliasChat/privacy.html
 
 ## Assets to upload
 
@@ -69,7 +69,7 @@ Tick all three certifications: not sold to third parties, not used for purposes 
 
 ## Package
 
-Run `scripts/pack-extension.sh`; upload `dist/privyAI-extension-<version>.zip`. The zip contains `manifest.json` plus every script and icon the manifest references, read from the manifest itself.
+Run `scripts/pack-extension.sh`; upload `dist/aliaschat-extension-<version>.zip`. The zip contains `manifest.json` plus every script and icon the manifest references, read from the manifest itself.
 
 ## After publishing
 
@@ -79,7 +79,7 @@ Put the 32-letter item ID from the store URL into `store/id.txt` (no newline) an
 
 1. Register at https://chrome.google.com/webstore/devconsole (one-time developer fee).
 2. New item, upload the zip.
-3. Fill the store listing from this file, upload the icon and at least one screenshot. Homepage and support URL: https://github.com/yhdhappy/privyAI
+3. Fill the store listing from this file, upload the icon and at least one screenshot. Homepage and support URL: https://github.com/yhdhappy/AliasChat
 4. Privacy tab: answer as above, set the privacy policy URL.
 5. Account tab: verify the contact email and declare trader or non-trader status (EU).
 6. Submit for review. First review usually takes a few days. Content scripts on three hosts and no permissions keep it in the fast lane.

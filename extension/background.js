@@ -1,6 +1,6 @@
 (() => {
-  chrome.runtime.onInstalled.addListener(details => {
-    chrome.storage.session.clear();
+  chrome.runtime.onInstalled.addListener(async details => {
+    await chrome.storage.session.remove('privyKey');
     maskingKey = undefined;
     if (details.reason === 'install') {
       chrome.tabs.create({ url: chrome.runtime.getURL('extension/welcome.html') });
@@ -24,12 +24,17 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id) return;
   (async () => {
     if (message?.type === 'privy-map-get') {
-      respond({ privyMap: (await chrome.storage.session.get('privyMap')).privyMap || {} });
+      const stored = await chrome.storage.session.get(['aliasMap', 'privyMap']);
+      const legacyMap = stored.privyMap && typeof stored.privyMap === 'object' && !Array.isArray(stored.privyMap) ? stored.privyMap : {};
+      const currentMap = stored.aliasMap && typeof stored.aliasMap === 'object' && !Array.isArray(stored.aliasMap) ? stored.aliasMap : {};
+      const aliasMap = { ...legacyMap, ...currentMap };
+      if (Object.entries(legacyMap).some(([key, value]) => currentMap[key] !== value)) await chrome.storage.session.set({ aliasMap });
+      respond({ privyMap: aliasMap });
       return;
     }
     if (message?.type === 'privy-map-set') {
       if (!message.privyMap || typeof message.privyMap !== 'object' || Array.isArray(message.privyMap)) throw new Error('Invalid placeholder map');
-      await chrome.storage.session.set({ privyMap: message.privyMap });
+      await chrome.storage.session.set({ aliasMap: message.privyMap });
       respond({ ok: true });
       return;
     }

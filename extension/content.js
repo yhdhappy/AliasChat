@@ -29,7 +29,7 @@
     const id = requestPrefix + ':' + ++sequence;
     const timer = setTimeout(() => {
       pending.delete(id);
-      reject(new Error('PrivyAI bridge did not respond'));
+      reject(new Error('AliasChat bridge did not respond'));
     }, 10000);
     pending.set(id, { resolve, reject, timer, type: type.replace('-request', '-result') });
     ready.then(() => {
@@ -42,12 +42,12 @@
     const el = document.createElement('div');
     el.setAttribute('data-mask2ai', '');
     el.style.cssText = style + 'right:16px;bottom:16px;';
-    el.textContent = '🛡 PrivyAI: ' + text;
+    el.textContent = '🛡 AliasChat: ' + text;
     (document.body || document.documentElement).appendChild(el);
     if (ms) setTimeout(() => el.remove(), ms);
   };
   const failure = error => show(error?.code === 'opaque-blocked'
-    ? 'PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them in PrivyAI options (allowOpaqueUploads).'
+    ? 'PDF/image uploads are blocked because they cannot be masked in the browser. You can allow them in AliasChat options (allowOpaqueUploads).'
     : 'could not mask personal data; request blocked', 6000);
   document.addEventListener('DOMContentLoaded', () => show('on, personal data is masked before sending', 4000));
 
@@ -122,7 +122,7 @@
     if (!state.async) {
       if (!chat) return send.call(this, body);
       failure();
-      throw new Error('PrivyAI requires asynchronous XMLHttpRequest for masking');
+      throw new Error('AliasChat requires asynchronous XMLHttpRequest for masking');
     }
     maskBody(state.url, body).then(masked => {
       if (state.active && states.get(this) === state) send.call(this, masked);

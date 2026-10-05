@@ -1,6 +1,6 @@
-# PrivyAI 技术文档
+# AliasChat 技术文档
 
-> 面向：写代码的 Agent。读完这份应该能直接上手改代码。基准：serkankorkut/mask2ai v0.6.0（MIT），PrivyAI 是其英文市场 fork。
+> 面向：写代码的 Agent。读完这份应该能直接上手改代码。基准：serkankorkut/mask2ai v0.6.0（MIT），AliasChat 是其英文市场 fork。
 
 ## 技术栈
 
@@ -26,7 +26,7 @@
 2. 识别发往 chatgpt.com / claude.ai 的聊天请求（URL 含 `completion` / `conversation` / `chat_conversations`）。
 3. 把请求体（JSON / 表单 / 字节流，支持 gzip）递给 `bridge.js`。
 4. `bridge.js` 调 `core/pii.js` 的 `mask()`：按类型（EMAIL、PHONE、CARD…）用正则找敏感信息，换成占位符如 `__PII_EMAIL_a1b2c3d4e5f6__`，真值记在对照表里。
-5. 改写后的请求发出去。发之前右下角弹 toast："PrivyAI: 遮蔽了 N 处"。
+5. 改写后的请求发出去。发之前右下角弹 toast："AliasChat: 遮蔽了 N 处"。
 
 **收回来（还原）：**
 1. `MutationObserver` 盯着页面文本节点。
@@ -56,7 +56,7 @@
 ## 安全设计（Phase 1b 加固后）
 
 1. **出错拦下不放行**：遮蔽任何一步出错 → 请求不发 + toast 报错。隐私工具默认不能"悄悄放行"。
-2. **对照表不出隔离世界**：真值只存在隔离世界的内存 Map 里，网页脚本读不到（之前放在 `sessionStorage`，同源脚本可读）。
+2. **对照表不出隔离世界**：真值保存在 `chrome.storage.session`，由 service worker 管理；网页脚本读不到。
 3. **配置通道加固**：`postMessage` 带 token，首条有效，防网页脚本发消息关掉防护。
 4. **自定义正则防卡死**：用户在设置页加的正则，保存时做语法校验 + 2000 字符压力测试，超 100ms 拒绝保存。
 5. **拦截面**：`fetch` + `XMLHttpRequest` 都包了。WebSocket / sendBeacon 聊天场景不用，暂不处理。
@@ -65,6 +65,7 @@
 
 - 设置页 `extension/options.html` → 存 `chrome.storage.sync`：开关各类检测、白名单、自定义规则。
 - CLI 插件读 `MASK2AI_CONFIG` 环境变量 → 当前目录 `.mask2ai.json` → `~/.mask2ai/config.json`（内部标识名保留，保证兼容）。
+- 新 CLI 会话数据写入 `~/.claude/aliaschat/`；旧 `~/.claude/privyAI/` 中的映射和占位符密钥继续可读。浏览器旧 `privyMap` key 会在仍存在时迁移到 `aliasMap`；Chrome 更新或重载扩展时会清空 `storage.session`。
 
 ## 测试
 

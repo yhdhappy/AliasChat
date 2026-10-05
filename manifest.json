@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "PrivyAI",
+  "name": "AliasChat",
   "version": "0.7.0",
-  "description": "PrivyAI masks personal data before your message reaches claude.ai or ChatGPT, then shows the real values on your screen.",
+  "description": "AliasChat masks detected personal data before your message reaches claude.ai or ChatGPT, then restores the real values on your screen.",
   "minimum_chrome_version": "111",
   "icons": {
     "16": "extension/icons/icon16.png",

@@ -7,7 +7,10 @@ const { mask: maskValue, createTokenizer, unmask, hasPlaceholder, deepMap, confi
 const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 
-const dir = process.env.CLAUDE_PLUGIN_DATA || path.join(os.homedir(), '.claude', 'privyAI');
+const customDir = process.env.CLAUDE_PLUGIN_DATA;
+const dir = customDir || path.join(os.homedir(), '.claude', 'aliaschat');
+const legacyDir = customDir ? null : path.join(os.homedir(), '.claude', 'privyAI');
+const dataDirs = legacyDir ? [dir, legacyDir] : [dir];
 const ensureDir = target => {
   fs.mkdirSync(target, { recursive: true, mode: 0o700 });
   fs.chmodSync(target, 0o700);
@@ -17,6 +20,9 @@ const mask = (text, found) => {
   if (!tokenize) {
     ensureDir(dir);
     const keyFile = path.join(dir, 'placeholder.key');
+    if (legacyDir && fs.existsSync(path.join(legacyDir, 'placeholder.key'))) {
+      try { fs.copyFileSync(path.join(legacyDir, 'placeholder.key'), keyFile, fs.constants.COPYFILE_EXCL); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+    }
     try { fs.writeFileSync(keyFile, crypto.randomBytes(32), { mode: 0o600, flag: 'wx' }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
     for (const name of fs.readdirSync(dir)) if (/^placeholder-.*\.tmp$/.test(name)) fs.rmSync(path.join(dir, name), { force: true });
     const key = fs.readFileSync(keyFile);
@@ -26,6 +32,7 @@ const mask = (text, found) => {
   return maskValue(text, found, tokenize);
 };
 const file = id => path.join(dir, `${id}.jsonl`);
+const files = id => dataDirs.map(root => path.join(root, `${id}.jsonl`));
 const save = (id, found) => {
   const lines = Object.entries(found).map(([p, v]) => JSON.stringify({ p, v }) + '\n').join('');
   if (!lines) return;
@@ -34,14 +41,14 @@ const save = (id, found) => {
 };
 const prune = () => {
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  try {
-    for (const f of fs.readdirSync(dir)) if (f.endsWith('.jsonl') && fs.statSync(path.join(dir, f)).mtimeMs < cutoff) fs.rmSync(path.join(dir, f), { force: true });
+  for (const root of dataDirs) try {
+    for (const f of fs.readdirSync(root)) if (f.endsWith('.jsonl') && fs.statSync(path.join(root, f)).mtimeMs < cutoff) fs.rmSync(path.join(root, f), { force: true });
   } catch {}
 };
 const load = id => {
   const map = {};
-  try {
-    for (const line of fs.readFileSync(file(id), 'utf8').split('\n')) {
+  for (const target of files(id).reverse()) try {
+    for (const line of fs.readFileSync(target, 'utf8').split('\n')) {
       if (!line) continue;
       const { p, v } = JSON.parse(line);
       map[p] = v;
@@ -67,20 +74,21 @@ const visionBinary = () => {
 const vision = (...args) => execFileSync(visionBinary(), args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 
 const IMAGE = /\.(png|jpe?g|gif|webp|bmp|tiff?|heic)$/i;
-const readsDir = id => path.join(dir, 'reads', id);
+const readsDir = (id, root = dir) => path.join(root, 'reads', id);
+const readDirs = id => dataDirs.map(root => readsDir(id, root));
 const stem = file => `${path.basename(file)}-${crypto.createHash('sha1').update(file).digest('hex').slice(0, 8)}`;
 
 const redirectPdf = (id, input, found) => {
   const file = input.tool_input.file_path;
-  if (!visionBinary()) return { systemMessage: `PrivyAI: ${path.basename(file)} read uninspected, converting PDFs needs macOS with the Swift toolchain` };
+  if (!visionBinary()) return { systemMessage: `AliasChat: ${path.basename(file)} read uninspected, converting PDFs needs macOS with the Swift toolchain` };
   const text = vision('pdf-text', file).replace(/\s+$/, '');
-  const content = text.trim() ? mask(text, found) : 'PrivyAI: this PDF has no extractable text, so it was not sent. Ask for it as an image instead.';
+  const content = text.trim() ? mask(text, found) : 'AliasChat: this PDF has no extractable text, so it was not sent. Ask for it as an image instead.';
   const out = path.join(readsDir(id), `${stem(file)}.txt`);
   ensureDir(readsDir(id));
   fs.writeFileSync(out, content, { mode: 0o600 });
   const n = Object.keys(found).length;
   return {
-    systemMessage: text.trim() ? `PrivyAI: converted ${path.basename(file)} to text and masked ${n} value${n === 1 ? '' : 's'}` : `PrivyAI: ${path.basename(file)} has no extractable text, nothing was sent`,
+    systemMessage: text.trim() ? `AliasChat: converted ${path.basename(file)} to text and masked ${n} value${n === 1 ? '' : 's'}` : `AliasChat: ${path.basename(file)} has no extractable text, nothing was sent`,
     hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: { ...input.tool_input, file_path: out } }
   };
 };
@@ -106,7 +114,7 @@ const imageBoxes = (file, found) => {
 
 const redirectImage = (id, input, found) => {
   const file = input.tool_input.file_path;
-  if (!visionBinary()) return { systemMessage: `PrivyAI: ${path.basename(file)} read uninspected, redacting images needs macOS with the Swift toolchain` };
+  if (!visionBinary()) return { systemMessage: `AliasChat: ${path.basename(file)} read uninspected, redacting images needs macOS with the Swift toolchain` };
   const boxes = imageBoxes(file, found);
   if (!boxes.length) return null;
   const out = path.join(readsDir(id), `${stem(file)}${/\.jpe?g$/i.test(file) ? '.jpg' : '.png'}`);
@@ -115,7 +123,7 @@ const redirectImage = (id, input, found) => {
   fs.chmodSync(out, 0o600);
   const n = Object.keys(found).length;
   return {
-    systemMessage: `PrivyAI: redacted ${n} value${n === 1 ? '' : 's'} in ${path.basename(file)}`,
+    systemMessage: `AliasChat: redacted ${n} value${n === 1 ? '' : 's'} in ${path.basename(file)}`,
     hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: { ...input.tool_input, file_path: out } }
   };
 };
@@ -138,7 +146,10 @@ const pastedImages = (id, input, found) => {
   const imgDir = input.scratchpad_dir && path.join(input.scratchpad_dir, 'images');
   if (!imgDir || !fs.existsSync(imgDir) || !visionBinary()) return [];
   const seenFile = path.join(dir, `${id}.images`);
-  const seen = new Set(fs.existsSync(seenFile) ? fs.readFileSync(seenFile, 'utf8').split('\n') : []);
+  const seen = new Set(dataDirs.flatMap(root => {
+    const file = path.join(root, `${id}.images`);
+    return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n') : [];
+  }));
   const blocked = [];
   for (const name of fs.readdirSync(imgDir)) {
     const file = path.join(imgDir, name);
@@ -163,7 +174,7 @@ const main = () => {
   const out = o => process.stdout.write(JSON.stringify(o));
   switch (input.hook_event_name) {
     case 'SessionStart':
-      out({ systemMessage: 'PrivyAI active: personal data in prompts and tool output is masked before it reaches the model' + (cfg ? (cfg.error ? `. Config ${cfg.file} ignored: ${cfg.error}` : `. Config: ${cfg.file}`) : ''), hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'Tokens shaped like __PII_EMAIL_a1b2c3d4e5f6__ are personal data masked by the PrivyAI plugin. Treat them as opaque literals: copy them verbatim into tool inputs, never guess, expand or alter them.' } });
+      out({ systemMessage: 'AliasChat active: personal data in prompts and tool output is masked before it reaches the model' + (cfg ? (cfg.error ? `. Config ${cfg.file} ignored: ${cfg.error}` : `. Config: ${cfg.file}`) : ''), hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'Tokens shaped like __PII_EMAIL_a1b2c3d4e5f6__ are personal data masked by the AliasChat plugin. Treat them as opaque literals: copy them verbatim into tool inputs, never guess, expand or alter them.' } });
       break;
     case 'UserPromptSubmit': {
       const found = {};
@@ -176,7 +187,7 @@ const main = () => {
         out({
           decision: 'block',
           suppressOriginalPrompt: true,
-          reason: `PrivyAI: personal data found in a pasted image, nothing was sent.\n${list}\n\nAttach the redacted copy instead (drag it into the chat) and resend${masked === input.prompt ? '.' : ' with this masked text:\n\n' + masked}`
+          reason: `AliasChat: personal data found in a pasted image, nothing was sent.\n${list}\n\nAttach the redacted copy instead (drag it into the chat) and resend${masked === input.prompt ? '.' : ' with this masked text:\n\n' + masked}`
         });
         break;
       }
@@ -184,7 +195,7 @@ const main = () => {
       out({
         decision: 'block',
         suppressOriginalPrompt: true,
-        reason: `PrivyAI: personal data found in your prompt, nothing was sent. ${copied ? 'A masked copy is in your clipboard: press Edit prompt, select all, paste, send. In the terminal just paste and send' : 'Resend this masked version'}:\n\n${masked}`
+        reason: `AliasChat: personal data found in your prompt, nothing was sent. ${copied ? 'A masked copy is in your clipboard: press Edit prompt, select all, paste, send. In the terminal just paste and send' : 'Resend this masked version'}:\n\n${masked}`
       });
       break;
     }
@@ -196,12 +207,12 @@ const main = () => {
       if (!Object.keys(found).length) break;
       save(id, found);
       const n = Object.keys(found).length;
-      out({ systemMessage: `PrivyAI: masked ${n} value${n === 1 ? '' : 's'} in ${input.tool_name} output`, hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } });
+      out({ systemMessage: `AliasChat: masked ${n} value${n === 1 ? '' : 's'} in ${input.tool_name} output`, hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: updated } });
       break;
     }
     case 'PreToolUse': {
       const file = input.tool_name === 'Read' && input.tool_input && input.tool_input.file_path;
-      if (file && (/\.pdf$/i.test(file) || IMAGE.test(file)) && !file.startsWith(readsDir(id))) {
+      if (file && (/\.pdf$/i.test(file) || IMAGE.test(file)) && !readDirs(id).some(directory => file.startsWith(directory))) {
         const found = {};
         const result = /\.pdf$/i.test(file) ? redirectPdf(id, input, found) : redirectImage(id, input, found);
         save(id, found);
@@ -221,7 +232,7 @@ const main = () => {
       out({ hookSpecificOutput: { hookEventName: 'MessageDisplay', displayContent: unmask(input.delta, load(id)) } });
       break;
     case 'SessionEnd':
-      fs.rmSync(readsDir(id), { recursive: true, force: true });
+      for (const target of readDirs(id)) fs.rmSync(target, { recursive: true, force: true });
       prune();
   }
 };
