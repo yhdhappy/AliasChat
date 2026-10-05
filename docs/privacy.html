@@ -25,6 +25,7 @@ p, li { font-size: 15px; }
 <p>When you send a message on claude.ai or chatgpt.com, AliasChat scans the message text in your browser tab for patterns that look like personal data (email addresses, phone numbers, payment card numbers, ID numbers, names, addresses, and similar). Each detected match is replaced with a placeholder before the message leaves your browser.</p>
 <p><strong>Limitations:</strong> Detection is pattern-based and cannot guarantee all personal data is caught. A bare name in free text with no title, label, or matching email nearby may not be detected. PDF and image uploads are blocked by default because their contents cannot be inspected in the browser.</p>
 <p>The mapping between placeholders and real values is kept in the browser's session storage, which is not accessible to web pages. It is never sent anywhere and is discarded when the browser closes.</p>
+<p>Restored real values are written into the page DOM so you can read them, which means the site's own scripts can also read them.</p>
 
 <h2>Optional Configuration</h2>
 <p>AliasChat has an options page where you may provide custom detection rules in JSON format. If you save configuration, it is stored using the browser's <code>chrome.storage.sync</code> API, which syncs through your own browser account (e.g., your Google account) according to your browser's sync settings. AliasChat's developers never see this data.</p>

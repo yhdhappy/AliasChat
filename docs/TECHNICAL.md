@@ -5,6 +5,7 @@
 ## 技术栈
 
 - Chrome Manifest V3 扩展，纯原生 JS，无构建步骤，无第三方依赖。
+- Firefox MV3 需要 `background.scripts` 和 `browser_specific_settings.gecko.id`；当前清单仅配置 `background.service_worker`，尚未实现 Firefox 支持。
 - 另含一个 Claude Code CLI 插件（hooks/mask.js），与浏览器扩展共用 `core/pii.js`。
 - 权限：只申请 `storage`（存用户配置），对商店审核友好。
 
@@ -17,7 +18,7 @@
 | 能干什么 | 能碰网页的网络请求（必须在这里才能拦截），但能被网页脚本看到 | 网页脚本看不到，能调 `chrome.storage` |
 | 职责 | 包裹 `fetch` / `XMLHttpRequest`，把要发的数据递给隔离世界 | 真正执行遮蔽/还原，保管"占位符↔真值"对照表 |
 
-两个世界之间用 `postMessage` 传话，带每会话随机 token，隔离世界只认第一条配置消息（防网页脚本伪造）。
+两个世界之间用 `postMessage` 传话，目标限定为 `location.origin`，token 每次页面加载随机生成。同源网页脚本仍能观察消息，包括 token、待遮蔽的完整明文请求体和文件字节，也能伪造 `mask-request`，用返回的占位符猜测低熵真值；限定 origin 不能认证发送者。bridge 每页使用容量 10、每 10 秒补充 10 个额度的令牌桶，超限返回错误并阻止发送，使批量 oracle 暴力猜测难以实际开展，但并非不可能；脚本也可耗尽额度阻断正常发送。
 
 ## 核心流程
 
@@ -57,7 +58,7 @@
 
 1. **出错拦下不放行**：遮蔽任何一步出错 → 请求不发 + toast 报错。隐私工具默认不能"悄悄放行"。
 2. **对照表不出隔离世界**：真值保存在 `chrome.storage.session`，由 service worker 管理；网页脚本读不到。
-3. **配置通道加固**：`postMessage` 带 token，首条有效，防网页脚本发消息关掉防护。
+3. **页面通道限流**：配置由扩展存储读取；MAIN world 接受首个有效 token，但 token 不认证网页消息。`mask-request` 在进入处理队列前限流，超限不执行遮蔽。
 4. **自定义正则防卡死**：用户在设置页加的正则，保存时做语法校验 + 2000 字符压力测试，超 100ms 拒绝保存。
 5. **拦截面**：`fetch` + `XMLHttpRequest` 都包了。WebSocket / sendBeacon 聊天场景不用，暂不处理。
 
