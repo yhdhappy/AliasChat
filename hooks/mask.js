@@ -13,13 +13,8 @@ const mask = (text, found) => {
   if (!tokenize) {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     const keyFile = path.join(dir, 'placeholder.key');
-    const temporary = path.join(dir, `placeholder-${crypto.randomBytes(16).toString('hex')}.tmp`);
-    try {
-      fs.writeFileSync(temporary, crypto.randomBytes(32), { mode: 0o600, flag: 'wx' });
-      try { fs.linkSync(temporary, keyFile); } catch (error) { if (error.code !== 'EEXIST') throw error; }
-    } finally {
-      fs.rmSync(temporary, { force: true });
-    }
+    try { fs.writeFileSync(keyFile, crypto.randomBytes(32), { mode: 0o600, flag: 'wx' }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+    for (const name of fs.readdirSync(dir)) if (/^placeholder-.*\.tmp$/.test(name)) fs.rmSync(path.join(dir, name), { force: true });
     const key = fs.readFileSync(keyFile);
     if (key.length !== 32) throw new Error('Invalid placeholder key');
     tokenize = createTokenizer(key);

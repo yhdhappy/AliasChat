@@ -141,7 +141,7 @@ assert(!mask("Dr. Jane Doe", {}).includes("Jane Doe"));
 const data = fs.mkdtempSync(path.join(os.tmpdir(), 'mask2ai-'));
 const hookSource = fs.readFileSync(path.join(__dirname, 'hooks/mask.js'), 'utf8');
 const hookRequire = require('module').createRequire(path.join(__dirname, 'hooks/mask.js'));
-const run = input => {
+const run = (input, pluginData = data) => {
   let output = '';
   const hookModule = {};
   const inputText = JSON.stringify({ session_id: 's1', ...input });
@@ -151,7 +151,7 @@ const run = input => {
     require: isolatedRequire,
     module: hookModule,
     __dirname: path.join(__dirname, 'hooks'),
-    process: { env: { CLAUDE_PLUGIN_DATA: data, PATH: '' }, platform: process.platform, stdout: { write: text => { output += text; } } }
+    process: { env: { CLAUDE_PLUGIN_DATA: pluginData, PATH: '' }, platform: process.platform, stdout: { write: text => { output += text; } } }
   }, { filename: 'hooks/mask.js', timeout: 10000 });
   return output ? JSON.parse(output) : null;
 };
@@ -163,7 +163,10 @@ assert(blocked.suppressOriginalPrompt);
 assert(!blocked.reason.includes('ali@example.com'));
 assert(/__PII_EMAIL_[0-9a-f]{12}__/.test(blocked.reason));
 
+const staleTemporary = path.join(data, 'placeholder-stale.tmp');
+fs.writeFileSync(staleTemporary, 'incomplete key');
 assert.strictEqual(run({ hook_event_name: 'UserPromptSubmit', prompt: 'email ali@example.com about it' }).reason, blocked.reason);
+assert(!fs.existsSync(staleTemporary), 'Stale placeholder key files must be cleaned up');
 assert.strictEqual(fs.statSync(path.join(data, 'placeholder.key')).mode & 0o777, 0o600);
 const key = fs.readFileSync(path.join(data, 'placeholder.key'));
 assert.strictEqual(key.length, 32);
