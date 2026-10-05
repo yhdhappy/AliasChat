@@ -24,8 +24,8 @@
   };
   const rewrite = (bodyText, maskFn, found) => /^\s*[[{]/.test(bodyText) ? rewriteJson(bodyText, maskFn, found) : rewriteForm(bodyText, maskFn, found);
   const token = [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
-  const getMap = async () => (await chrome.storage.session.get('privyMap')).privyMap || {};
-  const setMap = map => chrome.storage.session.set({ privyMap: map });
+  const getMap = async () => (await chrome.runtime.sendMessage({ type: 'privy-map-get' })).privyMap || {};
+  const setMap = map => chrome.runtime.sendMessage({ type: 'privy-map-set', privyMap: map });
   let queue = Promise.resolve();
   let userConfig = {};
   const ready = new Promise((resolve, reject) => chrome.storage.sync.get('config', ({ config }) => {

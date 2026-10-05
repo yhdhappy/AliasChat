@@ -32,9 +32,8 @@ for (const name of ['Will', 'May', 'Mark', 'Grace', 'Bill', 'Chase', 'Penny', 'A
 if (manifest.background) {
   const files = [...new Set(manifest.content_scripts.flatMap(script => script.js))];
   const background = fs.readFileSync(manifest.background.service_worker, 'utf8');
-  if ([background, ...files.map(file => fs.readFileSync(file, 'utf8'))].some(source => source.includes('chrome.storage.session'))) {
-    assert(background.includes('chrome.storage.session.setAccessLevel'), 'Background must set the session storage access level');
-  }
+  assert(!background.includes('TRUSTED_AND_UNTRUSTED_CONTEXTS'), 'Session storage must not be exposed to untrusted contexts');
+  assert(!background.includes('chrome.storage.session.setAccessLevel'), 'Session storage must retain its default trusted-context access level');
 }
 
 const repeated = 'My name is Ali Veli. Ali Veli, ali veli, ALI VELI. XAli Veli, Ali Velix, Ali Veli_1.';
@@ -129,6 +128,7 @@ const until = async predicate => {
 const extension = (config = {}, sessionStore = {}, failDigests = false) => {
   const listeners = [];
   const messages = [];
+  const runtimeRequests = [];
   const requests = [];
   const toasts = [];
   const shared = { crypto: webcrypto, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, Request, Response, Blob, File, FormData, URLSearchParams, CompressionStream, DecompressionStream, Event, NodeFilter: { SHOW_TEXT: 4 }, clearTimeout, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); return timer; } };
@@ -166,17 +166,21 @@ const extension = (config = {}, sessionStore = {}, failDigests = false) => {
     addEventListener() {},
     createTreeWalker: root => { let i = 0; return { nextNode: () => root.children[i++] }; }
   }, MutationObserver: class { constructor(fn) { observer = fn; } observe() {} } });
-  let digestListener;
+  let workerListener;
   const session = { get: async key => ({ [key]: sessionStore[key] }), set: async obj => { Object.assign(sessionStore, structuredClone(obj)); }, setAccessLevel: async () => {}, clear: async () => { for (const key of Object.keys(sessionStore)) delete sessionStore[key]; } };
   const restartBackground = () => vm.runInNewContext(fs.readFileSync('extension/background.js', 'utf8'), {
     crypto: webcrypto, Uint8Array, TextEncoder,
-    chrome: { storage: { session }, runtime: { id: 'privy-test', onStartup: { addListener() {} }, onInstalled: { addListener() {} }, onMessage: { addListener: fn => { digestListener = fn; } } } }
+    chrome: { storage: { session }, runtime: { id: 'privy-test', onStartup: { addListener() {} }, onInstalled: { addListener() {} }, onMessage: { addListener: fn => { workerListener = fn; } } } }
   });
   restartBackground();
   const bridge = vm.createContext({ ...shared, window: bridgeWindow, document: {
     documentElement: {},
     createTreeWalker: root => { let i = 0; return { nextNode: () => root.children[i++] }; }
-  }, MutationObserver: class { constructor(fn) { bridgeObserver = fn; } observe() {} }, chrome: { runtime: { sendMessage: message => failDigests ? Promise.reject(new Error('Worker unavailable')) : new Promise(resolve => digestListener(structuredClone(message), { id: 'privy-test' }, resolve)) }, storage: { sync: { get: (key, fn) => queueMicrotask(() => fn({ config })) }, session } } });
+  }, MutationObserver: class { constructor(fn) { bridgeObserver = fn; } observe() {} }, chrome: { runtime: { sendMessage: message => {
+    runtimeRequests.push(structuredClone(message));
+    if (failDigests && message.type === 'privy-digests') return Promise.reject(new Error('Worker unavailable'));
+    return new Promise(resolve => workerListener(structuredClone(message), { id: 'privy-test' }, resolve));
+  } }, storage: { sync: { get: (key, fn) => queueMicrotask(() => fn({ config })) }, session } } });
   const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
   for (const file of manifest.content_scripts[0].js) {
     vm.runInContext(fs.readFileSync(file, 'utf8'), page, { filename: file });
@@ -188,7 +192,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false) => {
     }
     vm.runInContext(fs.readFileSync(file, 'utf8'), bridge, { filename: file });
   }
-  return { page: pageWindow, requests, messages, toasts, deliver, sessionStore, restartBackground, mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
+  return { page: pageWindow, requests, messages, runtimeRequests, toasts, deliver, sessionStore, restartBackground, mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
 };
 
 (async () => {
@@ -247,6 +251,8 @@ const extension = (config = {}, sessionStore = {}, failDigests = false) => {
   const expectedEmail = createHmac('sha256', Buffer.from(ext.sessionStore.privyKey)).update('jane.doe@example.com').digest('hex').slice(0, 12);
   assert(wire.includes(`__PII_EMAIL_${expectedEmail}__`));
   assert(!JSON.stringify(ext.messages).includes(JSON.stringify(ext.sessionStore.privyKey)));
+  assert(ext.runtimeRequests.some(message => message.type === 'privy-map-get') && ext.runtimeRequests.some(message => message.type === 'privy-map-set'));
+  assert(!JSON.stringify(ext.runtimeRequests).includes(JSON.stringify(ext.sessionStore.privyKey)));
   assert(!ext.messages.some(message => 'salt' in message || 'key' in message || 'privyKey' in message));
   ext.restartBackground();
   await ext.page.fetch(url, { method: 'POST', body });
@@ -277,6 +283,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false) => {
   let completed = false;
   xhr.addEventListener('load', () => { assert.strictEqual(xhr.responseText, wire); completed = true; });
   xhr.send(body);
+  await delay();
   await until(() => completed);
   assert.strictEqual(ext.requests.at(-1).body, wire);
   const jsonXhr = new ext.page.XMLHttpRequest();
