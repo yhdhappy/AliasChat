@@ -231,3 +231,15 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 - Regressions cover numeric Chinese phones and IDs, card numbers, ordinary years and amounts, shared strings, deleted text and field instructions.
 - TECHNICAL records unsupported Office parts and long-tail detection patterns. Marketplace ownership and README repository commands now point to yhdhappy/AliasChat; the plugin and marketplace IDs remain privy-ai. PRODUCT removes Gumroad payment and launch entries.
 - Verification: timeout 60 node test.js, timeout 60 node test-security.js and timeout 60 npm test passed. Modified files have no trailing whitespace; manifest/package remain 0.7.0. No items skipped and no git commands run.
+
+## Batch 4 — final audit round (2026-10-05)
+
+- H1: XML_CELL no longer matches self-closing `<c .../>` tags; formula cells (`<f>` children) are left byte-identical. Regressions cover styled empty cells, formula cells and numeric phone cells with XML balance checks.
+- H2: vision() failures in redirectPdf/redirectImage now block the Read with a reason instead of silently passing the original file; visionBinary() null also blocks. Swift compile failures are cached via a 24h marker file to avoid recompiling on every hook call. main() catch for PreToolUse now outputs a block decision.
+- H3: pastedImages marks files seen only after successful processing, so OCR failures and resends reprocess the image. The reads-dir check uses path.resolve + path.relative containment instead of string prefix, closing the `../../` traversal.
+- M1: content-script to bridge masking now travels over a MessageChannel port (first-port-wins); window.postMessage mask-requests always use the strict bucket and the forgeable `via` field is gone. Test harness uses a fake in-memory channel (real worker_threads ports kept the test process alive).
+- M2: maskFileName only rewrites filenames on explicit PII patterns (email/phone/ID/card); NAME-only detections are rolled back. Generic names in filenames are intentionally not masked; documented in TECHNICAL.
+- M5: unknown-placeholder records cap at 10 attempts, release node references on give-up, and the timer stops when nothing is pending.
+- Misc: PRODUCT roadmap no longer says PrivyAI; TECHNICAL documents spaced Chinese mobile format; legacy placeholder.key copy is atomic via temp file + rename; bridge-timeout toast tells the user to refresh the page after extension update; README Limits notes the hook unmask-before-network-tools prompt-injection risk. No Firefox support claims anywhere (docs say planned only).
+- Not changed: plugin id privy-ai (deliberate compat), no CI, N4/M3-remainder/M6-long-tail remain documented limitations.
+- Verification: `npm test` passed (ok / office ok / security ok + hook checks) in ~10s; `git diff --check` clean; manifest/package remain 0.7.0.

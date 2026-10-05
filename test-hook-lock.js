@@ -42,7 +42,183 @@ const lock = (dir, timestamp, pid) => {
   fs.writeFileSync(path.join(dir, 'placeholder-key.lock', 'owner.json'), JSON.stringify({ timestamp, pid }));
 };
 
+const source = fs.readFileSync(script, 'utf8');
+const hookRequire = require('module').createRequire(script);
+const harness = (dir, options = {}) => {
+  let input;
+  let output;
+  const context = {
+    require: name => name === 'fs' ? { ...fs, ...options.fs, readFileSync: (file, ...args) => file === 0
+      ? JSON.stringify(input) : (options.fs?.readFileSync || fs.readFileSync)(file, ...args) }
+      : name === 'child_process' ? { spawnSync, execFileSync: options.exec || (() => { throw new Error('Unexpected vision call'); }) }
+        : name === 'os' && options.home ? { ...os, homedir: () => options.home } : hookRequire(name),
+    module: {}, __dirname: path.dirname(script),
+    process: { platform: options.platform || 'darwin', pid: process.pid, kill: process.kill,
+      env: options.home ? {} : { CLAUDE_PLUGIN_DATA: dir }, stdout: { write: text => { output = JSON.parse(text); } } }
+  };
+  require('vm').runInNewContext(source + '\nglobalThis.hook = { main, visionBinary };', context, { timeout: 1000 });
+  return {
+    binary: context.hook.visionBinary,
+    run: value => { input = value; output = null; context.hook.main(); return output; }
+  };
+};
+const readInput = file => ({ hook_event_name: 'PreToolUse', session_id: 'vision-test', tool_name: 'Read',
+  cwd: root, tool_input: { file_path: file } });
+const denied = (output, text) => {
+  assert(output, 'Read must receive a blocking decision');
+  assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
+  assert.strictEqual(output.hookSpecificOutput.hookEventName, 'PreToolUse');
+  assert(output.hookSpecificOutput.permissionDecisionReason.includes(text));
+  assert(!output.hookSpecificOutput.updatedInput);
+  assert(!output.hookSpecificOutput.permissionDecisionReason.includes('\n    at '));
+};
+const readyVision = dir => {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'vision'), 'mock');
+  const future = new Date(Date.now() + 10000);
+  fs.utimesSync(path.join(dir, 'vision'), future, future);
+};
+const visionRegressions = () => {
+  const dir = path.join(root, 'vision-errors');
+  readyVision(dir);
+  const ocr = JSON.stringify([{ text: 'private@example.com', words: [], box: [0, 0, 1, 1] }]);
+  for (const mode of ['pdf-text', 'ocr', 'redact']) {
+    const file = path.join(root, mode === 'pdf-text' ? 'corrupt.pdf' : 'corrupt.png');
+    const hook = harness(dir, { exec: (command, args) => {
+      if (args[0] === mode) throw new Error(`${mode} failed`);
+      assert.strictEqual(args[0], 'ocr');
+      return ocr;
+    } });
+    const output = hook.run(readInput(file));
+    denied(output, `${mode} failed`);
+    assert(output.hookSpecificOutput.permissionDecisionReason.includes(file));
+  }
+  console.log('hook vision extraction, OCR and redaction failures block ok (mock)');
+
+  const unavailable = path.join(root, 'vision-unavailable');
+  const noVision = harness(unavailable, { platform: 'linux' });
+  for (const extension of ['pdf', 'png']) denied(noVision.run(readInput(path.join(root, `uninspected.${extension}`))), 'Swift toolchain');
+  const marker = path.join(unavailable, 'vision-failure.json');
+  const recorded = fs.readFileSync(marker, 'utf8');
+  assert(Number.isFinite(JSON.parse(recorded).timestamp));
+  assert.strictEqual(noVision.binary(), null);
+  assert.strictEqual(fs.readFileSync(marker, 'utf8'), recorded);
+  console.log('hook unavailable vision blocks PDF and image reads ok');
+
+  const cached = path.join(root, 'vision-cached');
+  let attempts = 0;
+  const compiler = (command, args, options) => {
+    assert.strictEqual(command, 'swiftc');
+    assert.strictEqual(options.timeout, 120000);
+    attempts++;
+    throw new Error('Compiler timed out');
+  };
+  assert.strictEqual(harness(cached, { exec: compiler }).binary(), null);
+  assert.strictEqual(attempts, 1);
+  const failureFile = path.join(cached, 'vision-failure.json');
+  const timestamp = JSON.parse(fs.readFileSync(failureFile)).timestamp;
+  assert.strictEqual(harness(cached, { exec: compiler }).binary(), null);
+  assert.strictEqual(attempts, 1);
+  assert.strictEqual(JSON.parse(fs.readFileSync(failureFile)).timestamp, timestamp);
+  fs.writeFileSync(failureFile, JSON.stringify({ timestamp: Date.now() - 24 * 60 * 60 * 1000 - 1 }));
+  assert.strictEqual(harness(cached, { exec: compiler }).binary(), null);
+  assert.strictEqual(attempts, 2);
+  fs.writeFileSync(failureFile, JSON.stringify({ timestamp: Date.now() - 24 * 60 * 60 * 1000 - 1 }));
+  const successful = harness(cached, { exec: (command, args) => {
+    attempts++;
+    readyVision(cached);
+  } });
+  assert.strictEqual(successful.binary(), path.join(cached, 'vision'));
+  assert.strictEqual(attempts, 3);
+  assert(!fs.existsSync(failureFile));
+  fs.writeFileSync(failureFile, JSON.stringify({ timestamp: Date.now() }));
+  assert.strictEqual(harness(cached).binary(), path.join(cached, 'vision'));
+  console.log('hook compiler failure cached across invocations for 24h and success reused ok (mock)');
+
+  const traversal = path.join(dir, 'reads', 'vision-test') + '/../../outside.pdf';
+  const containment = harness(dir);
+  denied(containment.run(readInput(traversal)), 'Unexpected vision call');
+  denied(containment.run(readInput(path.join(dir, 'reads', 'vision-test-other', 'outside.pdf'))), 'Unexpected vision call');
+  assert.strictEqual(containment.run(readInput(path.join(dir, 'reads', 'vision-test', 'safe.pdf'))), null);
+  const crash = harness(dir, { fs: { existsSync: () => { throw new Error('Filesystem unavailable'); } } });
+  denied(crash.run(readInput('/tmp/test.pdf')), 'Filesystem unavailable');
+  console.log('hook traversal and sibling prefixes rejected; PreToolUse catch blocks ok');
+
+  for (const mode of ['ocr', 'redact']) {
+    const pastedDir = path.join(root, `pasted-${mode}`);
+    const scratch = path.join(root, `scratch-${mode}`);
+    readyVision(pastedDir);
+    fs.mkdirSync(path.join(scratch, 'images'), { recursive: true });
+    const image = path.join(scratch, 'images', 'paste.png');
+    fs.writeFileSync(image, 'mock');
+    let failed = false;
+    let scans = 0;
+    const hook = harness(pastedDir, { exec: (command, args) => {
+      if (args[0] === 'ocr') scans++;
+      if (args[0] === mode && !failed) { failed = true; throw new Error(`${mode} interrupted`); }
+      if (args[0] === 'ocr') return ocr;
+      fs.writeFileSync(args[2], 'redacted');
+      return '';
+    } });
+    const input = { hook_event_name: 'UserPromptSubmit', session_id: 'pasted', prompt: 'Inspect this', scratchpad_dir: scratch };
+    const failure = hook.run(input);
+    assert.strictEqual(failure.decision, 'block');
+    assert(failure.reason.includes(`${mode} interrupted`));
+    const seen = path.join(pastedDir, 'pasted.images');
+    assert(!fs.existsSync(seen));
+    const retry = hook.run(input);
+    assert.strictEqual(retry.decision, 'block');
+    assert(retry.reason.includes('personal data found in a pasted image'));
+    assert.strictEqual(scans, 2);
+    assert.strictEqual(fs.readFileSync(seen, 'utf8'), image + '\n');
+    assert.strictEqual(hook.run(input), null);
+    assert.strictEqual(scans, 2);
+    const cleanImage = path.join(scratch, 'images', 'clean.png');
+    fs.writeFileSync(cleanImage, 'mock');
+    let cleanScans = 0;
+    const clean = harness(pastedDir, { exec: () => { cleanScans++; return '[]'; } });
+    assert.strictEqual(clean.run(input), null);
+    assert(fs.readFileSync(seen, 'utf8').includes(cleanImage + '\n'));
+    assert.strictEqual(clean.run(input), null);
+    assert.strictEqual(cleanScans, 1);
+  }
+  console.log('hook pasted image OCR/redaction retry and successful seen marking ok (mock)');
+
+  const home = path.join(root, 'legacy-home');
+  const legacy = path.join(home, '.claude', 'privyAI');
+  const current = path.join(home, '.claude', 'aliaschat');
+  fs.mkdirSync(legacy, { recursive: true });
+  const key = crypto.randomBytes(32);
+  fs.writeFileSync(path.join(legacy, 'placeholder.key'), key);
+  let renamed = false;
+  const legacyHook = harness(current, { home, fs: {
+    writeFileSync: (file, content, options) => {
+      if (file.endsWith('.tmp')) {
+        assert(!fs.existsSync(path.join(current, 'placeholder.key')));
+        assert.strictEqual(path.dirname(file), current);
+        assert.strictEqual(options.mode, 0o600);
+        assert.strictEqual(options.flag, 'wx');
+        assert.deepStrictEqual(content, key);
+      }
+      return fs.writeFileSync(file, content, options);
+    },
+    renameSync: (from, to) => {
+      assert(!fs.existsSync(to));
+      assert.deepStrictEqual(fs.readFileSync(from), key);
+      fs.renameSync(from, to);
+      renamed = true;
+    }
+  } });
+  succeeds(legacyHook.run(prompt));
+  assert(renamed);
+  assert.deepStrictEqual(fs.readFileSync(path.join(current, 'placeholder.key')), key);
+  assert.strictEqual(fs.statSync(path.join(current, 'placeholder.key')).mode & 0o777, 0o600);
+  assert(!fs.readdirSync(current).some(name => name.endsWith('.tmp')));
+  console.log('hook legacy key atomically published with private permissions ok');
+};
+
 (async () => {
+  visionRegressions();
   const dir = path.join(root, 'concurrent');
   const marker = path.join(root, 'writing');
   const preload = path.join(root, 'delay.cjs');

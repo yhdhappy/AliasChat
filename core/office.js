@@ -8,7 +8,7 @@
   const TEXT_PARTS = /^(word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml|xl\/sharedStrings\.xml|ppt\/(slides|notesSlides)\/[^/]+\.xml)$/;
   const PROPERTIES = /^docProps\/(core|app)\.xml$/;
   const WORKSHEETS = /^xl\/worksheets\/sheet\d+\.xml$/;
-  const XML_CELL = /(<c\b[^>]*>)([\s\S]*?)(<\/c>)/g;
+  const XML_CELL = /(<c\b(?![^>]*\/>)[^>]*>)([\s\S]*?)(<\/c>)/g;
   const XML_NUMBER = /<v>(\d+)<\/v>/g;
   const PROPERTY_TEXT = /(<([\w:.-]+)(?:\s[^>]*)?>)([^<]*)(<\/\2>)/g;
   const XML_TEXT = /(<(?:w:t|w:delText|w:instrText|t|a:t)(?:\s[^>]*)?>)([^<]*)(<\/(?:w:t|w:delText|w:instrText|t|a:t)>)/g;
@@ -28,16 +28,18 @@
       };
       let out = PROPERTIES.test(e.name)
         ? xml.replace(PROPERTY_TEXT, (m, open, tag, text, close) => replaceText(m, open, text, close, /^(dc:creator|cp:lastModifiedBy)$/.test(tag)))
-        : xml.replace(XML_TEXT, (m, open, text, close) => replaceText(m, open, text, close));
+        : WORKSHEETS.test(e.name) ? xml : xml.replace(XML_TEXT, (m, open, text, close) => replaceText(m, open, text, close));
       if (WORKSHEETS.test(e.name)) {
         out = out.replace(XML_CELL, (cell, open, content, close) => {
+          if (/<f\b/.test(content)) return cell;
+          content = content.replace(XML_TEXT, (m, open, text, close) => replaceText(m, open, text, close));
           const type = open.match(/\bt\s*=\s*(["'])(.*?)\1/);
-          if (type && type[2] !== 'n') return cell;
+          if (type && type[2] !== 'n') return open + content + close;
           const masked = content.replace(XML_NUMBER, (value, number) => {
             const text = maskText(number, found);
             return text === number ? value : '<is><t>' + encode(text) + '</t></is>';
           });
-          if (masked === content) return cell;
+          if (masked === content) return open + content + close;
           const textOpen = type ? open.replace(type[0], 't="inlineStr"') : open.slice(0, -1) + ' t="inlineStr">';
           return textOpen + masked + close;
         });

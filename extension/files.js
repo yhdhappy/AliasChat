@@ -10,12 +10,17 @@
     const dot = name.lastIndexOf('.');
     const stem = dot > 0 ? name.slice(0, dot) : name;
     const extension = dot > 0 ? name.slice(dot) : '';
-    const named = stem.replace(/(?<![\p{L}])\p{Lu}\p{Ll}+(?:[ _-]+\p{Lu}\p{Ll}+){1,3}(?![\p{L}])/gu, value => {
-      const normalized = value.replace(/[_-]/g, ' ');
-      const masked = maskText('Name: ' + normalized, found).slice(6);
-      return masked === normalized ? value : masked;
-    });
-    return maskText(named, found) + extension;
+    const existing = new Set(Object.keys(found));
+    const masked = maskText(stem, found);
+    const added = Object.keys(found).filter(placeholder => !existing.has(placeholder));
+    const placeholders = masked.match(/__PII_[A-Z_]+_[0-9a-f]+__/g) || [];
+    if (!placeholders.some(placeholder => !placeholder.startsWith('__PII_NAME_') && !stem.includes(placeholder))) {
+      for (const placeholder of added) delete found[placeholder];
+      return name;
+    }
+    const restored = masked.replace(/__PII_NAME_[0-9a-f]+__/g, placeholder => found[placeholder] ?? placeholder);
+    for (const placeholder of added) if (placeholder.startsWith('__PII_NAME_')) delete found[placeholder];
+    return restored + extension;
   };
   const maskFile = async (file, maskText, found, warn = () => {}, config = {}) => {
     const kind = classify(file.name);

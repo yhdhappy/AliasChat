@@ -48,7 +48,7 @@ AliasChat 的定位是**防误发**，不是军工级隐私保证。宣传口径
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | Phase 0 | 验货：确认原项目真实可用、MIT 可商用 | ✅ |
-| Phase 1 | 改名为 PrivyAI、删土耳其检测、换 Logo | ✅ |
+| Phase 1 | 改名为 AliasChat（曾用名 PrivyAI/VeilAI）、删土耳其检测、换 Logo | ✅ |
 | Phase 1b | 8 项安全加固（见技术文档） | ✅ |
 | Phase 1c | 改名为 AliasChat，保留旧存储与 CLI 数据读取兼容 | ✅ |
 | Phase 2 | 商店物料：截图、描述文案 | ⬜ |

@@ -61,7 +61,13 @@ const mask = (text, found) => {
         if (!fs.existsSync(keyFile)) {
           for (const name of fs.readdirSync(dir)) if (/^placeholder-.*\.tmp$/.test(name)) fs.rmSync(path.join(dir, name), { force: true });
           if (legacyDir && fs.existsSync(path.join(legacyDir, 'placeholder.key'))) {
-            try { fs.copyFileSync(path.join(legacyDir, 'placeholder.key'), keyFile, fs.constants.COPYFILE_EXCL); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+            const temporary = path.join(dir, `placeholder-${crypto.randomBytes(16).toString('hex')}.tmp`);
+            try {
+              fs.writeFileSync(temporary, fs.readFileSync(path.join(legacyDir, 'placeholder.key')), { mode: 0o600, flag: 'wx' });
+              fs.renameSync(temporary, keyFile);
+            } finally {
+              fs.rmSync(temporary, { force: true });
+            }
           }
           if (!fs.existsSync(keyFile)) {
             const temporary = path.join(dir, `placeholder-${crypto.randomBytes(16).toString('hex')}.tmp`);
@@ -110,16 +116,26 @@ const load = id => {
 };
 
 const visionBinary = () => {
-  if (process.platform !== 'darwin') return null;
   const src = path.join(__dirname, 'vision.swift');
   const bin = path.join(dir, 'vision');
+  const failure = path.join(dir, 'vision-failure.json');
   try {
-    if (!fs.existsSync(bin) || fs.statSync(bin).mtimeMs < fs.statSync(src).mtimeMs) {
-      ensureDir(dir);
-      execFileSync('swiftc', ['-O', '-o', bin, src], { stdio: 'ignore', timeout: 120000 });
+    if (process.platform === 'darwin' && fs.existsSync(bin) && fs.statSync(bin).mtimeMs >= fs.statSync(src).mtimeMs) return bin;
+    try {
+      const { timestamp } = JSON.parse(fs.readFileSync(failure, 'utf8'));
+      if (Number.isFinite(timestamp) && Date.now() - timestamp < 24 * 60 * 60 * 1000) return null;
+    } catch {}
+    ensureDir(dir);
+    if (process.platform !== 'darwin') {
+      fs.writeFileSync(failure, JSON.stringify({ timestamp: Date.now() }), { mode: 0o600 });
+      return null;
     }
+    execFileSync('swiftc', ['-O', '-o', bin, src], { stdio: 'ignore', timeout: 120000 });
+    fs.rmSync(failure, { force: true });
     return bin;
   } catch {
+    ensureDir(dir);
+    fs.writeFileSync(failure, JSON.stringify({ timestamp: Date.now() }), { mode: 0o600 });
     return null;
   }
 };
@@ -130,10 +146,18 @@ const readsDir = (id, root = dir) => path.join(root, 'reads', id);
 const readDirs = id => dataDirs.map(root => readsDir(id, root));
 const stem = file => `${path.basename(file)}-${crypto.createHash('sha1').update(file).digest('hex').slice(0, 8)}`;
 
+const blockRead = reason => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } });
+const failureMessage = error => error && error.message ? error.message : String(error);
+
 const redirectPdf = (id, input, found) => {
   const file = input.tool_input.file_path;
-  if (!visionBinary()) return { systemMessage: `AliasChat: ${path.basename(file)} read uninspected, converting PDFs needs macOS with the Swift toolchain` };
-  const text = vision('pdf-text', file).replace(/\s+$/, '');
+  if (!visionBinary()) return blockRead(`AliasChat: blocked Read of ${file}; PDF inspection requires macOS with an available Swift toolchain.`);
+  let text;
+  try {
+    text = vision('pdf-text', file).replace(/\s+$/, '');
+  } catch (error) {
+    return blockRead(`AliasChat: blocked Read of ${file}; PDF text extraction failed: ${failureMessage(error)}`);
+  }
   const content = text.trim() ? mask(text, found) : 'AliasChat: this PDF has no extractable text, so it was not sent. Ask for it as an image instead.';
   const out = path.join(readsDir(id), `${stem(file)}.txt`);
   ensureDir(readsDir(id));
@@ -166,12 +190,21 @@ const imageBoxes = (file, found) => {
 
 const redirectImage = (id, input, found) => {
   const file = input.tool_input.file_path;
-  if (!visionBinary()) return { systemMessage: `AliasChat: ${path.basename(file)} read uninspected, redacting images needs macOS with the Swift toolchain` };
-  const boxes = imageBoxes(file, found);
+  if (!visionBinary()) return blockRead(`AliasChat: blocked Read of ${file}; image inspection requires macOS with an available Swift toolchain.`);
+  let boxes;
+  try {
+    boxes = imageBoxes(file, found);
+  } catch (error) {
+    return blockRead(`AliasChat: blocked Read of ${file}; image OCR failed: ${failureMessage(error)}`);
+  }
   if (!boxes.length) return null;
   const out = path.join(readsDir(id), `${stem(file)}${/\.jpe?g$/i.test(file) ? '.jpg' : '.png'}`);
   ensureDir(readsDir(id));
-  vision('redact', file, out, JSON.stringify(boxes));
+  try {
+    vision('redact', file, out, JSON.stringify(boxes));
+  } catch (error) {
+    return blockRead(`AliasChat: blocked Read of ${file}; image redaction failed: ${failureMessage(error)}`);
+  }
   fs.chmodSync(out, 0o600);
   const n = Object.keys(found).length;
   return {
@@ -207,12 +240,15 @@ const pastedImages = (id, input, found) => {
     const file = path.join(imgDir, name);
     if (!IMAGE.test(name) || /-redacted\./.test(name) || seen.has(file) || Date.now() - fs.statSync(file).mtimeMs > 10 * 60 * 1000) continue;
     ensureDir(dir);
-    fs.appendFileSync(seenFile, file + '\n', { mode: 0o600 });
     const hits = {};
     const boxes = imageBoxes(file, hits);
-    if (!boxes.length) continue;
+    if (!boxes.length) {
+      fs.appendFileSync(seenFile, file + '\n', { mode: 0o600 });
+      continue;
+    }
     const out = path.join(imgDir, name.replace(/\.(\w+)$/, '-redacted.png'));
     vision('redact', file, out, JSON.stringify(boxes));
+    fs.appendFileSync(seenFile, file + '\n', { mode: 0o600 });
     Object.assign(found, hits);
     blocked.push({ name, out, count: Object.keys(hits).length });
   }
@@ -266,11 +302,14 @@ const main = () => {
       }
       case 'PreToolUse': {
         const file = input.tool_name === 'Read' && input.tool_input && input.tool_input.file_path;
-        if (file && (/\.pdf$/i.test(file) || IMAGE.test(file)) && !readDirs(id).some(directory => file.startsWith(directory))) {
+        if (file && (/\.pdf$/i.test(file) || IMAGE.test(file)) && !readDirs(id).some(directory => {
+          const relative = path.relative(path.resolve(directory), path.resolve(file));
+          return !path.isAbsolute(relative) && !relative.startsWith('..');
+        })) {
           const found = {};
           const result = /\.pdf$/i.test(file) ? redirectPdf(id, input, found) : redirectImage(id, input, found);
           save(id, found);
-          if (result && result.hookSpecificOutput && input.cwd && path.resolve(file).startsWith(path.resolve(input.cwd) + path.sep)) result.hookSpecificOutput.permissionDecision = 'allow';
+          if (result && result.hookSpecificOutput && result.hookSpecificOutput.updatedInput && input.cwd && path.resolve(file).startsWith(path.resolve(input.cwd) + path.sep)) result.hookSpecificOutput.permissionDecision = 'allow';
           if (result) out(result);
           break;
         }
@@ -312,6 +351,8 @@ const main = () => {
         out({ systemMessage: `AliasChat error: ${message}. AliasChat did not mask this event.` });
         break;
       case 'PreToolUse':
+        out(blockRead(`AliasChat: blocked tool use; ${message}`));
+        break;
       case 'MessageDisplay':
       case 'SessionEnd':
         break;

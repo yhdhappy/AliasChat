@@ -200,6 +200,7 @@ If you prefer your own instrument, point `ANTHROPIC_BASE_URL` at a logging proxy
 - In the browser, intercepted PDF and image file uploads are blocked by default because their contents cannot be inspected. Setting allowOpaqueUploads to true permits them uninspected with a warning. Office and text uploads are masked. Upload masking is verified on claude.ai; ChatGPT web uploads use a two-step flow that has not been verified.
 - Image redaction relies on OCR. Text the OCR cannot read, handwriting, or personal data that is not text, such as a face, is not redacted.
 - Claude Code hooks cannot rewrite a prompt, only block it, so a prompt containing personal data has to be resent in masked form.
+- The hook restores placeholders to real values before network-capable tools run (`WebFetch`, `curl` via `Bash`). A model steered by prompt injection could use this to exfiltrate personal data; treat tool outputs from untrusted pages accordingly.
 - The Chrome extension rewrites supported requests made through the page's `fetch` and asynchronous `XMLHttpRequest`. Unit tests cover JSON and form-encoded, plain and gzip-compressed bodies. Editing, retrying, regenerating and title requests still need real UI captures; see [request coverage and capture steps](docs/REQUEST-COVERAGE.md). A change in either site's client may require an update.
 
 ## Technical details

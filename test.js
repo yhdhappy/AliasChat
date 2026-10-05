@@ -207,6 +207,31 @@ assert.deepStrictEqual(JSON.parse(fieldForm.get("state")), fieldBody);
   assert.deepStrictEqual(Object.values(sheetMap).sort(), ['13800138000', '110105194912310003', '4111111111111111', 'sheet@example.com'].sort());
   assert.strictEqual(new TextDecoder().decode(maskedWorkbook.find(e => e.name === 'xl/worksheets/sheet2.xml').data), '<worksheet><c><v>2026</v></c></worksheet>');
   assert(new TextDecoder().decode(maskedWorkbook.find(e => e.name === 'xl/sharedStrings.xml').data).includes('__PII_EMAIL_'));
+  const emptyCell = '<c r="A1" s="1"/>';
+  const formulaCells = ['<c><f>A1+1</f><v>2</v></c>', '<c r="C1"><f>13800138000</f><v>13800138000</v></c>', '<c r="D1"><f t="shared" si="0"/><v>13800138000</v></c>'];
+  const phoneCell = '<c r="B1"><v>13800138000</v></c>';
+  for (const cells of [emptyCell + phoneCell, formulaCells.join('') + phoneCell, phoneCell]) {
+    const xml = '<worksheet><sheetData><row>' + cells + '</row></sheetData></worksheet>';
+    const map = {};
+    const bytes = await zip.write([{ name: 'xl/worksheets/sheet1.xml', data: te.encode(xml) }]);
+    const result = new TextDecoder().decode((await zip.read(await office.mask(bytes, mask, map)))[0].data);
+    const tags = [];
+    let offset = 0;
+    for (const tag of result.matchAll(/<(\/?)([\w:.-]+)((?:\s+[\w:.-]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*)(\/?)>/g)) {
+      assert(!/[<>]/.test(result.slice(offset, tag.index)), result);
+      if (tag[1]) assert.strictEqual(tags.pop(), tag[2], result);
+      else if (!tag[4]) tags.push(tag[2]);
+      offset = tag.index + tag[0].length;
+    }
+    assert(!/[<>]/.test(result.slice(offset)), result);
+    assert.deepStrictEqual(tags, [], result);
+    if (cells.includes(emptyCell)) assert(result.includes(emptyCell), result);
+    for (const formula of formulaCells) {
+      if (cells.includes(formula)) assert(result.includes(formula), result);
+    }
+    assert(/<c r="B1" t="inlineStr"><is><t>__PII_PHONE_CN_[0-9a-f]{12}__<\/t><\/is><\/c>/.test(result), result);
+    assert.deepStrictEqual(Object.values(map), ['13800138000']);
+  }
   const ff = {};
   const docxFile = new File([docx], "Contact.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   const maskedDocx = await files.maskFile(docxFile, mask, ff);
@@ -290,6 +315,9 @@ for (const hook_event_name of ['SessionStart', 'PostToolUse', 'PreToolUse', 'Mes
     assert.strictEqual(failure.continue, false);
     assert.strictEqual(failure.decision, 'block');
     assert(failure.systemMessage.includes('ALIASCHAT SECURITY FAILURE'));
+  } else if (hook_event_name === 'PreToolUse') {
+    assert.strictEqual(failure.hookSpecificOutput.permissionDecision, 'deny');
+    assert(failure.hookSpecificOutput.permissionDecisionReason.includes('Config unreadable'));
   } else if (hook_event_name === 'SessionStart') assert(failure.systemMessage.includes('AliasChat did not mask'));
   else assert.strictEqual(failure, null);
 }

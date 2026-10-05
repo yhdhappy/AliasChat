@@ -91,13 +91,11 @@
     await setMap(map);
     return { body, count: Object.keys(found).length, warnings };
   };
-  window.addEventListener('message', e => {
-    const data = e.data;
+  let contentPort;
+  const handleMaskRequest = (data, bucket) => {
     if (!data || typeof data !== 'object') return;
-    if (data.type === 'mask2ai-ready') return sendConfig();
     if (data.token !== token || data.type !== 'mask-request' || typeof data.id !== 'string') return;
     const now = performance.now();
-    const bucket = data.via === 'content-script' ? contentBucket : pageBucket;
     bucket.tokens = Math.min(bucket.capacity, bucket.tokens + (now - bucket.refilledAt) * bucket.refillPerMs);
     bucket.refilledAt = now;
     if (bucket.tokens < 1) {
@@ -109,6 +107,18 @@
       try { window.postMessage({ type: 'mask-result', token, id: data.id, result: await run(data) }, location.origin); }
       catch (error) { window.postMessage({ type: 'mask-result', token, id: data.id, error: error.code === 'map-storage-error' ? error.message : 'AliasChat could not process personal data safely', code: ['opaque-blocked', 'unknown-blocked', 'encoding-blocked', 'map-storage-error'].includes(error.code) ? error.code : undefined }, location.origin); }
     });
+  };
+  window.addEventListener('message', e => {
+    const data = e.data;
+    if (!data || typeof data !== 'object') return;
+    if (data.type === 'mask2ai-ready') {
+      if (!contentPort && e.ports?.[0]) {
+        contentPort = e.ports[0];
+        contentPort.onmessage = event => handleMaskRequest(event.data, contentBucket);
+      }
+      return sendConfig();
+    }
+    handleMaskRequest(data, pageBucket);
   });
   sendConfig();
 
@@ -135,16 +145,23 @@
     return flushUnmask();
   }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
   const scheduleUnknown = () => {
-    if (unknownTimer || !unknownPlaceholders.size) return;
     let expiresAt = Infinity;
-    for (const record of unknownPlaceholders.values()) expiresAt = Math.min(expiresAt, record.seenAt + 30000);
+    for (const record of unknownPlaceholders.values()) {
+      if (record.attempts < 10 && record.nodes.size) expiresAt = Math.min(expiresAt, record.seenAt + 30000);
+    }
+    if (expiresAt === Infinity) {
+      clearTimeout(unknownTimer);
+      unknownTimer = undefined;
+      return;
+    }
+    if (unknownTimer) return;
     unknownTimer = setTimeout(async () => {
       unknownTimer = undefined;
       const now = Date.now();
-      for (const [placeholder, record] of unknownPlaceholders) {
-        if (now - record.seenAt < 30000) continue;
-        unknownPlaceholders.delete(placeholder);
+      for (const record of unknownPlaceholders.values()) {
+        if (record.attempts >= 10 || now - record.seenAt < 30000) continue;
         for (const node of record.nodes) if (node.isConnected !== false && eligible(node)) pendingNodes.add(node);
+        record.nodes.clear();
       }
       await flushUnmask();
       scheduleUnknown();
@@ -170,19 +187,40 @@
     const targets = nodes.filter(node => {
       if (!eligible(node)) return false;
       const placeholders = node.data.match(PLACEHOLDER_RE) || [];
-      for (const p of placeholders) unknownPlaceholders.get(p)?.nodes.add(node);
-      return placeholders.some(p => !unknownPlaceholders.has(p) || now - unknownPlaceholders.get(p).seenAt >= 30000);
+      for (const p of placeholders) {
+        const record = unknownPlaceholders.get(p);
+        if (record && record.attempts < 10) record.nodes.add(node);
+      }
+      return placeholders.some(p => {
+        const record = unknownPlaceholders.get(p);
+        return !record || (record.attempts < 10 && now - record.seenAt >= 30000);
+      });
     });
     if (!targets.length) return;
     const values = await getMap();
     const original = targets.map(node => node.data);
     const body = original.map(text => unmask(text, values));
+    const attempted = new Set();
     for (let i = 0; i < targets.length; i++) {
       const placeholders = original[i].match(PLACEHOLDER_RE) || [];
       for (const p of placeholders) {
-        if (!body[i].includes(p)) continue;
-        if (!unknownPlaceholders.has(p)) unknownPlaceholders.set(p, { seenAt: now, nodes: new Set() });
-        unknownPlaceholders.get(p).nodes.add(targets[i]);
+        if (!body[i].includes(p)) {
+          unknownPlaceholders.delete(p);
+          continue;
+        }
+        let record = unknownPlaceholders.get(p);
+        if (!record) {
+          record = { seenAt: now, attempts: 0, nodes: new Set() };
+          unknownPlaceholders.set(p, record);
+        }
+        if (record.attempts >= 10) continue;
+        if (!attempted.has(p)) {
+          record.attempts++;
+          record.seenAt = now;
+          attempted.add(p);
+        }
+        if (record.attempts >= 10) record.nodes.clear();
+        else record.nodes.add(targets[i]);
       }
     }
     scheduleUnknown();

@@ -2,6 +2,7 @@
   const { isChatRequest, isUploadMetadataRequest } = window.piiRewrite;
   const requestPrefix = [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
   const pending = new Map();
+  const channel = new MessageChannel();
   let token;
   let sequence = 0;
   let acceptConfig;
@@ -24,7 +25,7 @@
     clearTimeout(request.timer);
     data.error ? request.reject(Object.assign(new Error(data.error), { code: data.code })) : request.resolve(data.result);
   });
-  window.postMessage({ type: 'mask2ai-ready' }, location.origin);
+  window.postMessage({ type: 'mask2ai-ready' }, location.origin, [channel.port2]);
   const rpc = (type, payload) => new Promise((resolve, reject) => {
     const id = requestPrefix + ':' + ++sequence;
     const timer = setTimeout(() => {
@@ -33,7 +34,7 @@
     }, 10000);
     pending.set(id, { resolve, reject, timer, type: type.replace('-request', '-result') });
     ready.then(() => {
-      if (pending.has(id)) window.postMessage({ type, token, id, ...payload }, location.origin);
+      if (pending.has(id)) channel.port1.postMessage({ type, token, id, ...payload });
     });
   });
 
@@ -54,7 +55,9 @@
         ? 'File upload blocked because its text encoding could not be decoded safely. You can allow uninspected uploads in AliasChat options (allowUnknownUploads).'
         : error?.code === 'map-storage-error'
           ? error.message
-          : 'could not mask personal data; request blocked', 6000);
+          : error?.message === 'AliasChat bridge did not respond'
+            ? 'AliasChat was updated; please refresh this page to keep masking active'
+            : 'could not mask personal data; request blocked', 6000);
   document.addEventListener('DOMContentLoaded', () => show('on, personal data is masked before sending', 4000));
 
   const gunzip = bytes => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
@@ -92,7 +95,7 @@
       } else throw new Error('Unsupported chat request body');
     }
     if (!payload) return body;
-    const result = await rpc('mask-request', { ...payload, via: 'content-script' });
+    const result = await rpc('mask-request', payload);
     for (const name of result.warnings) show(name, 6000);
     if (result.count) show(`masked ${result.count} value${result.count === 1 ? '' : 's'} before sending`, 4000);
     return restore(result.body);

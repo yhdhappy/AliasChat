@@ -50,6 +50,37 @@ const unicodeText = 'My name is İpek Şahin. İPEK ŞAHİN and İpek Şahin; X�
 assert(!pii.mask(unicodeText, unicodeNames).includes('and İpek Şahin;'));
 assert.strictEqual(pii.unmask(pii.mask(unicodeText, {}), unicodeNames), unicodeText);
 
+const { maskFileName } = require('./extension/files.js');
+for (const name of ['Quarterly Financial Report.docx', 'Annual-Budget-Plan.xlsx', 'Project Alpha Roadmap.pptx', 'john smith passport.png', 'John_Smith_passport.pdf', 'Name: John Smith.txt']) {
+  const found = { __PII_EMAIL_abcdef123456__: 'existing@example.com' };
+  assert.strictEqual(maskFileName(name, pii.mask, found), name);
+  assert.deepStrictEqual(found, { __PII_EMAIL_abcdef123456__: 'existing@example.com' });
+}
+for (const [name, pattern, value] of [
+  ['Jane Doe jane.doe@example.com.DoCx', /^Jane Doe __PII_EMAIL_[0-9a-f]{12}__\.DoCx$/, 'jane.doe@example.com'],
+  ['Name: John Smith; 13800138000.XlSx', /^Name: John Smith; __PII_PHONE_CN_[0-9a-f]{12}__\.XlSx$/, '13800138000']
+]) {
+  const found = {};
+  assert(pattern.test(maskFileName(name, pii.mask, found)), name);
+  assert.deepStrictEqual(Object.values(found), [value]);
+}
+{
+  const found = {};
+  pii.mask('repeated@example.com', found);
+  const existing = { ...found };
+  assert(/^__PII_EMAIL_[0-9a-f]{12}__\.txt$/.test(maskFileName('repeated@example.com.txt', pii.mask, found)));
+  assert.deepStrictEqual(found, existing);
+}
+{
+  const found = {};
+  pii.mask('Name: John Smith', found);
+  const existing = { ...found };
+  assert.strictEqual(maskFileName('john smith passport.png', pii.mask, found), 'john smith passport.png');
+  assert.deepStrictEqual(found, existing);
+  assert(/^John Smith __PII_PHONE_CN_[0-9a-f]{12}__\.PNG$/.test(maskFileName('John Smith 13800138000.PNG', pii.mask, found)));
+  assert.deepStrictEqual(Object.entries(found).filter(([key]) => key.startsWith('__PII_NAME_')), Object.entries(existing));
+}
+
 const card = prefix => {
   for (let digit = 0; digit < 10; digit++) if (pii.luhn(prefix + digit)) return prefix + digit;
 };
@@ -147,7 +178,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   const toasts = [];
   let now = 0;
   const unmaskTimers = [];
-  const shared = { location: { origin: 'https://chatgpt.com' }, performance: { now: () => now }, crypto: webcrypto, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, Request, Response, Blob, File, FormData, URLSearchParams, CompressionStream, DecompressionStream, Event, NodeFilter: { SHOW_TEXT: 4 }, clearTimeout, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); return timer; } };
+  const shared = { location: { origin: 'https://chatgpt.com' }, performance: { now: () => now }, crypto: webcrypto, MessageChannel: class { constructor() { const deliverTo = port => data => queueMicrotask(() => port.onmessage && port.onmessage({ data })); this.port1 = { postMessage: null, onmessage: null }; this.port2 = { postMessage: null, onmessage: null }; this.port1.postMessage = deliverTo(this.port2); this.port2.postMessage = deliverTo(this.port1); } }, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, Request, Response, Blob, File, FormData, URLSearchParams, CompressionStream, DecompressionStream, Event, NodeFilter: { SHOW_TEXT: 4 }, clearTimeout, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); return timer; } };
   let observer;
   let bridgeObserver;
   let bridgeMaskCalls = 0;
@@ -167,15 +198,15 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   }
   const pageWindow = { XMLHttpRequest: XHR, fetch: async (input, init) => { requests.push({ transport: 'fetch', input, init }); return new Response('ok'); } };
   const bridgeWindow = {};
-  const deliver = data => {
-    for (const listener of listeners) listener.fn({ source: listener.window, data: structuredClone(data) });
+  const deliver = (data, transfer) => {
+    for (const listener of listeners) listener.fn({ source: listener.window, data: structuredClone(data), ports: transfer || [] });
   };
   for (const window of [pageWindow, bridgeWindow]) {
     window.addEventListener = (type, fn) => { if (type === 'message') listeners.push({ window, fn }); };
-    window.postMessage = (data, targetOrigin) => {
+    window.postMessage = (data, targetOrigin, transfer) => {
       messages.push(structuredClone(data));
       postMessages.push({ data: structuredClone(data), targetOrigin });
-      queueMicrotask(() => deliver(data));
+      queueMicrotask(() => deliver(data, transfer));
     };
   }
   const page = vm.createContext({ ...shared, window: pageWindow, document: {
@@ -618,15 +649,15 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   namedUpload.append('file', new File(['%PDF-1.7'], 'John_Smith_passport.pdf'));
   await allowedUpload.page.fetch(url, { method: 'POST', body: namedUpload });
   const maskedName = allowedUpload.requests.at(-1).init.body.get('file').name;
-  assert(/^__PII_NAME_[0-9a-f]{12}___passport\.pdf$/.test(maskedName), maskedName);
+  assert.strictEqual(maskedName, 'John_Smith_passport.pdf');
   const directForm = await require('./extension/files.js').maskFormData(namedUpload, pii.mask, {}, () => {}, { allowOpaqueUploads: true });
-  assert(/^__PII_NAME_[0-9a-f]{12}___passport\.pdf$/.test(directForm.get('file').name));
+  assert.strictEqual(directForm.get('file').name, 'John_Smith_passport.pdf');
   const metadata = extension();
   const metadataUrl = 'https://chatgpt.com/backend-api/files';
   const metadataBody = JSON.stringify({ file_name: 'John_Smith_passport.pdf', file_size: 8, use_case: 'multimodal' });
   await metadata.page.fetch(metadataUrl, { method: 'POST', body: metadataBody });
   const maskedMetadata = JSON.parse(metadata.requests.at(-1).init.body);
-  assert(/^__PII_NAME_[0-9a-f]{12}___passport\.pdf$/.test(maskedMetadata.file_name));
+  assert.strictEqual(maskedMetadata.file_name, 'John_Smith_passport.pdf');
   assert.strictEqual(maskedMetadata.file_size, 8);
   assert.strictEqual(maskedMetadata.use_case, 'multimodal');
   await metadata.page.fetch(new Request(metadataUrl, { method: 'POST', body: metadataBody }));
