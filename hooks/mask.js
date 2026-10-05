@@ -332,6 +332,7 @@ const main = () => {
         break;
       case 'SessionEnd':
         for (const target of readDirs(id)) fs.rmSync(target, { recursive: true, force: true });
+        if (input.scratchpad_dir) fs.rmSync(path.join(input.scratchpad_dir, 'images'), { recursive: true, force: true });
         prune();
     }
   } catch (error) {

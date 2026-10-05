@@ -335,6 +335,19 @@ fs.renameSync = (...args) => {
   }
   console.log('hook PostToolUse failure intervention ok');
 
+  {
+    const dir = path.join(root, 'session-end-cleanup');
+    const scratch = path.join(dir, 'scratch');
+    const images = path.join(scratch, 'images');
+    const quarantine = path.join(images, 'quarantine');
+    fs.mkdirSync(quarantine, { recursive: true });
+    fs.writeFileSync(path.join(quarantine, 'abc-secret.png'), 'sensitive-bytes');
+    fs.writeFileSync(path.join(images, 'clean.png'), 'clean-bytes');
+    harness(dir).run({ hook_event_name: 'SessionEnd', session_id: 'cleanup-test', scratchpad_dir: scratch });
+    assert(!fs.existsSync(images), 'session images dir incl. quarantine must be removed on SessionEnd');
+    console.log('hook SessionEnd removes pasted images and quarantine ok');
+  }
+
   let compiled = false;
   const source = fs.readFileSync(script, 'utf8');
   const hookRequire = require('module').createRequire(script);
