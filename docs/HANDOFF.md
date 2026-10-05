@@ -105,7 +105,6 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 - 删除页面 `map-clear` 接口；映射继续保存在 `chrome.storage.session`，页面消息不能清除映射。
 - NAME_STOPLIST 仅保留指定的 11 个常见词；新增去重、姓氏重复遮蔽、上传拦截和实际 zip 内容回归检查。
 - 验证：`npm test` 输出 ok / office ok / security ok；随后 `node test-security.js` 输出 security ok。未运行 `demo/verify-web.js`，由 Mac 上的真实 Chrome 补跑。
-- 沙箱 `.git` 只读，提交因 index.lock 创建失败而未执行，未 push；六项独立补丁和外部提交脚本保存在 `/tmp/privyai-prepublish/`，等待外部以 Muse <muse@local> 逐项提交后统一 push。
 
 ## 四项复现问题修复（2026-10-05）
 
@@ -243,3 +242,18 @@ AliasChat = mask2ai（MIT）的二次开发 fork：Chrome 浏览器插件，在�
 - Misc: PRODUCT roadmap no longer says PrivyAI; TECHNICAL documents spaced Chinese mobile format; legacy placeholder.key copy is atomic via temp file + rename; bridge-timeout toast tells the user to refresh the page after extension update; README Limits notes the hook unmask-before-network-tools prompt-injection risk. No Firefox support claims anywhere (docs say planned only).
 - Not changed: plugin id privy-ai (deliberate compat), no CI, N4/M3-remainder/M6-long-tail remain documented limitations.
 - Verification: `npm test` passed (ok / office ok / security ok + hook checks) in ~10s; `git diff --check` clean; manifest/package remain 0.7.0.
+
+## Label regex, formula cache and phone separator fixes (2026-10-05)
+
+- H1: All DOB, ID, ADDRESS and NAME label rules bound whitespace to 20 characters per segment and avoid adjacent whitespace runs around absent punctuation. Security regressions enforce 200ms per input for label aliases followed by 10000 spaces or tabs, with punctuation variants; ordinary date, ID, name and address detection still passes.
+- M3: Formula cells mask cached `<v>` text and use `t="str"` for changed caches, preserving `<f>` verbatim. Office regressions cover numeric phones, cached emails, shared formulas, XML escaping and tag balance, and unchanged ordinary or absent caches.
+- PHONE_CN: Optional spaces or hyphens at both 3/4/4 boundaries mask complete values, including `138-0013-8000` and `138 00138000`; plain and fully spaced phones, international phones and standalone `138` regressions pass.
+- Verification: `timeout 60 node test.js`, `timeout 60 node test-security.js` and `timeout 60 npm test` passed (ok / office ok / security ok plus hook checks). Office checks are in test.js; no separate test-office.js exists. No commit or push; manifest/package remain 0.7.0.
+
+## Handshake, pasted image and vision recovery fixes (2026-10-05)
+
+- H2: content offers fresh MessageChannel ports up to five times with 500ms retries; bridge requests a port after 250ms and acknowledges the accepted port. Acknowledgement also carries configuration token recovery. Failed handshakes use the strict direct postMessage masking channel. Extension VM regressions cover late startup before and after retry exhaustion, lost offers, lost acknowledgements and lost config messages.
+- M1: Sensitive pasted originals are never marked seen after generating a copy; repeat submissions remain blocked. Clean images, including inspected redacted copies, are marked seen. Unavailable vision blocks pasted images with a reason, including on non-macOS systems.
+- M2: Vision compilation failures are cached for five minutes; existing binaries bypass the cache. Denials give the actual marker path, Xcode Command Line Tools installation command and retry steps. Hook command timeout is 180 seconds, exceeding the 120-second compiler timeout. Mock regressions verify cache expiry, manual deletion, binary recovery, repeated image blocking and clean-copy inspection.
+- Docs: current brand and Chinese phone separators corrected; privacy date is 2026-10-06; obsolete prepublish and attribution traces removed. TECHNICAL explains filename NAME rollback and MessagePort.prototype exposure. Listing discloses WebSocket/sendBeacon/Worker fetch gaps; README retains network-tool unmasking risk and corrects non-macOS behavior. Firefox references state planned or unsupported only.
+- Verification: npm test passed (ok / office ok / security ok plus hook checks); git diff --check passed. Office checks are included in test.js; test-office.js does not exist. Vision compilation and OCR regressions used mocks. Existing core/pii.js and core/office.js edits were preserved; no commit or push.

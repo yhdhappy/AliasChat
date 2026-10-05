@@ -116,11 +116,18 @@
         contentPort = e.ports[0];
         contentPort.onmessage = event => handleMaskRequest(event.data, contentBucket);
       }
+      if (contentPort) contentPort.postMessage({ type: 'mask2ai-port-ack', token });
       return sendConfig();
     }
     handleMaskRequest(data, pageBucket);
   });
   sendConfig();
+  const requestPort = attempt => {
+    if (contentPort || attempt >= 5) return;
+    window.postMessage({ type: 'mask2ai-port-request' }, location.origin);
+    setTimeout(() => requestPort(attempt + 1), 500);
+  };
+  setTimeout(() => requestPort(0), 250);
 
   const eligible = node => node.nodeType === 3 && hasPlaceholder(node.data) && !node.parentElement?.closest('[contenteditable], textarea, [data-mask2ai]');
   const unknownPlaceholders = new Map();

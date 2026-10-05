@@ -119,11 +119,12 @@ const visionBinary = () => {
   const src = path.join(__dirname, 'vision.swift');
   const bin = path.join(dir, 'vision');
   const failure = path.join(dir, 'vision-failure.json');
+  const binaryExists = process.platform === 'darwin' && fs.existsSync(bin);
   try {
-    if (process.platform === 'darwin' && fs.existsSync(bin) && fs.statSync(bin).mtimeMs >= fs.statSync(src).mtimeMs) return bin;
+    if (binaryExists && fs.statSync(bin).mtimeMs >= fs.statSync(src).mtimeMs) return bin;
     try {
       const { timestamp } = JSON.parse(fs.readFileSync(failure, 'utf8'));
-      if (Number.isFinite(timestamp) && Date.now() - timestamp < 24 * 60 * 60 * 1000) return null;
+      if (!binaryExists && Number.isFinite(timestamp) && Date.now() - timestamp < 5 * 60 * 1000) return null;
     } catch {}
     ensureDir(dir);
     if (process.platform !== 'darwin') {
@@ -139,6 +140,7 @@ const visionBinary = () => {
     return null;
   }
 };
+const visionUnavailable = () => `Inspection requires macOS with an available Swift toolchain. On macOS, run xcode-select --install and finish installing Xcode Command Line Tools, then delete ${path.join(dir, 'vision-failure.json')} and resend the prompt or retry the Read. Failed compilation is cached for five minutes; on other platforms use a text version of the file instead.`;
 const vision = (...args) => execFileSync(visionBinary(), args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 
 const IMAGE = /\.(png|jpe?g|gif|webp|bmp|tiff?|heic)$/i;
@@ -151,7 +153,7 @@ const failureMessage = error => error && error.message ? error.message : String(
 
 const redirectPdf = (id, input, found) => {
   const file = input.tool_input.file_path;
-  if (!visionBinary()) return blockRead(`AliasChat: blocked Read of ${file}; PDF inspection requires macOS with an available Swift toolchain.`);
+  if (!visionBinary()) return blockRead(`AliasChat: blocked Read of ${file}; ${visionUnavailable()}`);
   let text;
   try {
     text = vision('pdf-text', file).replace(/\s+$/, '');
@@ -190,7 +192,7 @@ const imageBoxes = (file, found) => {
 
 const redirectImage = (id, input, found) => {
   const file = input.tool_input.file_path;
-  if (!visionBinary()) return blockRead(`AliasChat: blocked Read of ${file}; image inspection requires macOS with an available Swift toolchain.`);
+  if (!visionBinary()) return blockRead(`AliasChat: blocked Read of ${file}; ${visionUnavailable()}`);
   let boxes;
   try {
     boxes = imageBoxes(file, found);
@@ -229,7 +231,7 @@ const loadConfig = cwd => {
 
 const pastedImages = (id, input, found) => {
   const imgDir = input.scratchpad_dir && path.join(input.scratchpad_dir, 'images');
-  if (!imgDir || !fs.existsSync(imgDir) || !visionBinary()) return [];
+  if (!imgDir || !fs.existsSync(imgDir)) return [];
   const seenFile = path.join(dir, `${id}.images`);
   const seen = new Set(dataDirs.flatMap(root => {
     const file = path.join(root, `${id}.images`);
@@ -238,7 +240,8 @@ const pastedImages = (id, input, found) => {
   const blocked = [];
   for (const name of fs.readdirSync(imgDir)) {
     const file = path.join(imgDir, name);
-    if (!IMAGE.test(name) || /-redacted\./.test(name) || seen.has(file) || Date.now() - fs.statSync(file).mtimeMs > 10 * 60 * 1000) continue;
+    if (!IMAGE.test(name) || seen.has(file) || Date.now() - fs.statSync(file).mtimeMs > 10 * 60 * 1000) continue;
+    if (!visionBinary()) throw new Error(`AliasChat: blocked pasted image ${name}. ${visionUnavailable()}`);
     ensureDir(dir);
     const hits = {};
     const boxes = imageBoxes(file, hits);
@@ -248,7 +251,6 @@ const pastedImages = (id, input, found) => {
     }
     const out = path.join(imgDir, name.replace(/\.(\w+)$/, '-redacted.png'));
     vision('redact', file, out, JSON.stringify(boxes));
-    fs.appendFileSync(seenFile, file + '\n', { mode: 0o600 });
     Object.assign(found, hits);
     blocked.push({ name, out, count: Object.keys(hits).length });
   }

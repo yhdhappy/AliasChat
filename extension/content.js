@@ -2,7 +2,12 @@
   const { isChatRequest, isUploadMetadataRequest } = window.piiRewrite;
   const requestPrefix = [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
   const pending = new Map();
-  const channel = new MessageChannel();
+  const channels = [];
+  let contentPort;
+  let attempts = 0;
+  let handshakeTimer;
+  let finishHandshake;
+  const transportReady = new Promise(resolve => { finishHandshake = resolve; });
   let token;
   let sequence = 0;
   let acceptConfig;
@@ -11,6 +16,11 @@
   window.addEventListener('message', e => {
     const data = e.data;
     if (!data || typeof data !== 'object') return;
+    if (data.type === 'mask2ai-port-request') {
+      if (!contentPort && attempts < 5) offerPort();
+      else window.postMessage({ type: 'mask2ai-ready' }, location.origin);
+      return;
+    }
     if (data.type === 'mask2ai-config') {
       if (token || typeof data.token !== 'string' || !/^[0-9a-f]{64}$/.test(data.token)) return;
       // First config wins. Page scripts can observe the token, preempt this handshake, or forge RPC traffic; postMessage cannot authenticate the isolated bridge.
@@ -25,7 +35,33 @@
     clearTimeout(request.timer);
     data.error ? request.reject(Object.assign(new Error(data.error), { code: data.code })) : request.resolve(data.result);
   });
-  window.postMessage({ type: 'mask2ai-ready' }, location.origin, [channel.port2]);
+  const offerPort = () => {
+    clearTimeout(handshakeTimer);
+    const channel = new MessageChannel();
+    channels.push(channel.port1);
+    channel.port1.onmessage = event => {
+      if (event.data?.type !== 'mask2ai-port-ack' || contentPort) return;
+      if (!token && typeof event.data.token === 'string' && /^[0-9a-f]{64}$/.test(event.data.token)) {
+        token = event.data.token;
+        acceptConfig();
+      }
+      contentPort = channel.port1;
+      clearTimeout(handshakeTimer);
+      for (const port of channels) if (port !== contentPort) port.close();
+      finishHandshake();
+    };
+    attempts++;
+    window.postMessage({ type: 'mask2ai-ready' }, location.origin, [channel.port2]);
+    handshakeTimer = setTimeout(() => {
+      if (contentPort) return;
+      if (attempts < 5) offerPort();
+      else {
+        window.postMessage({ type: 'mask2ai-ready' }, location.origin);
+        finishHandshake();
+      }
+    }, 500);
+  };
+  offerPort();
   const rpc = (type, payload) => new Promise((resolve, reject) => {
     const id = requestPrefix + ':' + ++sequence;
     const timer = setTimeout(() => {
@@ -33,8 +69,11 @@
       reject(new Error('AliasChat bridge did not respond'));
     }, 10000);
     pending.set(id, { resolve, reject, timer, type: type.replace('-request', '-result') });
-    ready.then(() => {
-      if (pending.has(id)) channel.port1.postMessage({ type, token, id, ...payload });
+    Promise.all([ready, transportReady]).then(() => {
+      if (!pending.has(id)) return;
+      const data = { type, token, id, ...payload };
+      if (contentPort) contentPort.postMessage(data);
+      else window.postMessage(data, location.origin);
     });
   });
 

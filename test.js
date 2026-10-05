@@ -34,7 +34,7 @@ for (const value of ['219-45-6789', '111-11-1111', '001-01-0001', '899-99-9999']
   assert.deepStrictEqual(Object.values(ssns), [value]);
   assert.strictEqual(unmask(result, ssns), value);
 }
-for (const [value, type] of [['+14155552671', 'PHONE'], ['13800138000', 'PHONE_CN'], ['138 0013 8000', 'PHONE_CN']]) {
+for (const [value, type] of [['+14155552671', 'PHONE'], ['13800138000', 'PHONE_CN'], ['138 0013 8000', 'PHONE_CN'], ['138-0013-8000', 'PHONE_CN'], ['138 00138000', 'PHONE_CN'], ['138-00138000', 'PHONE_CN']]) {
   const phones = {};
   const result = mask(value, phones);
   assert(new RegExp('^__PII_' + type + '_[0-9a-f]{12}__$').test(result), result);
@@ -208,7 +208,16 @@ assert.deepStrictEqual(JSON.parse(fieldForm.get("state")), fieldBody);
   assert.strictEqual(new TextDecoder().decode(maskedWorkbook.find(e => e.name === 'xl/worksheets/sheet2.xml').data), '<worksheet><c><v>2026</v></c></worksheet>');
   assert(new TextDecoder().decode(maskedWorkbook.find(e => e.name === 'xl/sharedStrings.xml').data).includes('__PII_EMAIL_'));
   const emptyCell = '<c r="A1" s="1"/>';
-  const formulaCells = ['<c><f>A1+1</f><v>2</v></c>', '<c r="C1"><f>13800138000</f><v>13800138000</v></c>', '<c r="D1"><f t="shared" si="0"/><v>13800138000</v></c>'];
+  const formulaCells = [
+    '<c><f>A1+1</f><v>2</v></c>',
+    '<c r="C1"><f>13800138000</f><v>13800138000</v></c>',
+    '<c r="D1"><f t="shared" si="0"/><v>13800138000</v></c>',
+    '<c r="E1" s="2" t="n"><f>SUM(A1:A2)</f><v>13800138000</v></c>',
+    '<c r="F1" t="str"><f>&quot;cached@example.com&quot;</f><v>cached@example.com</v></c>',
+    '<c r="G1" t="str"><f>IF(A1&lt;2,&quot;a+b@example.com &amp; archived&quot;,&quot;&quot;)</f><v>a+b@example.com &amp; archived</v></c>',
+    '<c r="H1" t="str"><f>IF(A1&lt;2,&quot;ordinary&quot;,&quot;&quot;)</f><v>ordinary</v></c>',
+    '<c r="I1"><f>13800138000</f></c>'
+  ];
   const phoneCell = '<c r="B1"><v>13800138000</v></c>';
   for (const cells of [emptyCell + phoneCell, formulaCells.join('') + phoneCell, phoneCell]) {
     const xml = '<worksheet><sheetData><row>' + cells + '</row></sheetData></worksheet>';
@@ -227,10 +236,24 @@ assert.deepStrictEqual(JSON.parse(fieldForm.get("state")), fieldBody);
     assert.deepStrictEqual(tags, [], result);
     if (cells.includes(emptyCell)) assert(result.includes(emptyCell), result);
     for (const formula of formulaCells) {
-      if (cells.includes(formula)) assert(result.includes(formula), result);
+      if (!cells.includes(formula)) continue;
+      const f = formula.match(/<f\b[^>]*(?:\/>|>[\s\S]*?<\/f>)/)[0];
+      assert(result.includes(f), result);
+      const value = formula.match(/<v>([^<]*)<\/v>/)?.[1];
+      if (!value || ['2', 'ordinary'].includes(value)) {
+        assert(result.includes(formula), result);
+        continue;
+      }
+      const ref = formula.match(/\br="([^"]*)"/)[1];
+      const cell = result.match(new RegExp('<c r="' + ref + '"[^>]*>[\\s\\S]*?</c>'))[0];
+      assert(/\bt="str"/.test(cell), cell);
+      assert(!cell.includes('<is>'), cell);
+      assert(/<v>__PII_(?:PHONE_CN|EMAIL)_[0-9a-f]{12}__(?: &amp; archived)?<\/v>/.test(cell), cell);
+      const original = value.replace(/&amp;/g, '&');
+      assert.strictEqual(unmask(cell.match(/<v>([^<]*)<\/v>/)[1].replace(/&amp;/g, '&'), map), original);
     }
     assert(/<c r="B1" t="inlineStr"><is><t>__PII_PHONE_CN_[0-9a-f]{12}__<\/t><\/is><\/c>/.test(result), result);
-    assert.deepStrictEqual(Object.values(map), ['13800138000']);
+    assert.deepStrictEqual(Object.values(map).sort(), cells.includes(formulaCells[0]) ? ['13800138000', 'cached@example.com', 'a+b@example.com'].sort() : ['13800138000']);
   }
   const ff = {};
   const docxFile = new File([docx], "Contact.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });

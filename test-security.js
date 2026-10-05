@@ -99,6 +99,42 @@ assert.strictEqual(pii.mask(chinese, {}), chinese);
 pii.configure({});
 
 const base64urlText = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-'.repeat(625);
+const piiLabels = [
+  'dob', 'date of birth', 'birthdate', 'birth date', 'born', 'born on', 'dt', 'd.t.',
+  'id number', 'id no', 'passport', 'passport no', 'passport number', 'national id', 'drivers license', "driver's licence",
+  'Dear', 'My name is', 'I am', "I'm", 'Regards', 'Sincerely', 'Best regards', 'Kind regards', 'Cheers',
+  'Mr', 'Mrs', 'Ms', 'Miss', 'Dr', 'Prof',
+  'first name', 'last name', 'given name', 'family name', 'surname', 'full name',
+  'customer', 'customer name', 'contact', 'contact name', 'owner', 'patient', 'employee', 'name',
+  'address', 'addr', 'street address', 'billing address', 'shipping address', 'home address'
+];
+for (const label of piiLabels) for (const whitespace of [' ', '\t']) for (const punctuation of ['', ':', '" :', ',']) {
+  const text = label + punctuation + whitespace.repeat(10000);
+  const start = performance.now();
+  assert.strictEqual(pii.mask(text, {}), text);
+  const elapsed = performance.now() - start;
+  assert(elapsed < 200, `${JSON.stringify(label + punctuation)} with 10000 ${JSON.stringify(whitespace)} characters must finish in under 200ms (took ${elapsed.toFixed(2)}ms)`);
+}
+for (const [text, value, type] of [
+  ['dob: 1990-01-01', '1990-01-01', 'DOB'],
+  ['"dob" : "1990-01-01"', '1990-01-01', 'DOB'],
+  ['born 01/02/1990', '01/02/1990', 'DOB'],
+  ['id number: AB1234567', 'AB1234567', 'ID'],
+  ['"passport" = "AB1234567"', 'AB1234567', 'ID'],
+  ['Dear John Smith', 'John Smith', 'NAME'],
+  ['Dear,\tJohn Smith', 'John Smith', 'NAME'],
+  ['Dr. John Smith', 'John Smith', 'NAME'],
+  ['"firstName" : "John"', 'John', 'NAME'],
+  ['"name" : "John Smith"', 'John Smith', 'NAME'],
+  ['name:' + ' '.repeat(20) + 'John Smith', 'John Smith', 'NAME'],
+  ['"address" : "123 Main Street"', '123 Main Street', 'ADDRESS']
+]) {
+  const values = {};
+  const masked = pii.mask(text, values);
+  assert(masked.includes('__PII_' + type + '_'), masked);
+  assert.deepStrictEqual(Object.values(values), [value]);
+  assert.strictEqual(pii.unmask(masked, values), text);
+}
 for (const text of ['a'.repeat(40000), '-'.repeat(40000), '_'.repeat(40000), base64urlText, 'a@' + 'a.'.repeat(20000) + '1', 'a@' + 'a'.repeat(40000), '@' + '-'.repeat(40000), 'a@' + '-'.repeat(40000), 'a@' + '-.'.repeat(20000) + '1']) {
   const start = performance.now();
   const masked = pii.mask(text, {});
@@ -168,7 +204,7 @@ const until = async predicate => {
   }
   throw new Error('Expected asynchronous operation did not complete');
 };
-const extension = (config = {}, sessionStore = {}, failDigests = false, failFirstImport = false, fakeUnmaskTimers = false) => {
+const extension = (config = {}, sessionStore = {}, failDigests = false, failFirstImport = false, fakeUnmaskTimers = false, handshake = {}) => {
   const listeners = [];
   const messages = [];
   const postMessages = [];
@@ -178,7 +214,13 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   const toasts = [];
   let now = 0;
   const unmaskTimers = [];
-  const shared = { location: { origin: 'https://chatgpt.com' }, performance: { now: () => now }, crypto: webcrypto, MessageChannel: class { constructor() { const deliverTo = port => data => queueMicrotask(() => port.onmessage && port.onmessage({ data })); this.port1 = { postMessage: null, onmessage: null }; this.port2 = { postMessage: null, onmessage: null }; this.port1.postMessage = deliverTo(this.port2); this.port2.postMessage = deliverTo(this.port1); } }, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, Request, Response, Blob, File, FormData, URLSearchParams, CompressionStream, DecompressionStream, Event, NodeFilter: { SHOW_TEXT: 4 }, clearTimeout, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); return timer; } };
+  const handshakeTimers = [];
+  const transferredPorts = new Set();
+  const shared = { location: { origin: 'https://chatgpt.com' }, performance: { now: () => now }, crypto: webcrypto, MessageChannel: class { constructor() { const deliverTo = port => data => { if (data.type === 'mask2ai-port-ack' && handshake.dropAck?.()) return; queueMicrotask(() => port.onmessage && port.onmessage({ data })); }; this.port1 = { postMessage: null, onmessage: null, close() { this.onmessage = null; } }; this.port2 = { postMessage: null, onmessage: null, close() { this.onmessage = null; } }; this.port1.postMessage = deliverTo(this.port2); this.port2.postMessage = deliverTo(this.port1); } }, Uint8Array, ArrayBuffer, TextEncoder, TextDecoder, Request, Response, Blob, File, FormData, URLSearchParams, CompressionStream, DecompressionStream, Event, NodeFilter: { SHOW_TEXT: 4 }, clearTimeout, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); return timer; } };
+  if (handshake.fakeTimers) {
+    shared.setTimeout = (fn, ms) => { const timer = { fn, at: now + ms }; handshakeTimers.push(timer); return timer; };
+    shared.clearTimeout = timer => { if (timer) timer.cancelled = true; };
+  }
   let observer;
   let bridgeObserver;
   let bridgeMaskCalls = 0;
@@ -206,6 +248,12 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     window.postMessage = (data, targetOrigin, transfer) => {
       messages.push(structuredClone(data));
       postMessages.push({ data: structuredClone(data), targetOrigin });
+      for (const port of transfer || []) {
+        assert(!transferredPorts.has(port), 'A transferred MessagePort cannot be transferred again');
+        transferredPorts.add(port);
+      }
+      if (data.type === 'mask2ai-ready' && transfer?.length && handshake.dropReady?.()) return;
+      if (data.type === 'mask2ai-config' && handshake.dropConfig) return;
       queueMicrotask(() => deliver(data, transfer));
     };
   }
@@ -246,16 +294,88 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     vm.runInContext(fs.readFileSync(file, 'utf8'), page, { filename: file });
     if (page.piiRewrite) pageWindow.piiRewrite = page.piiRewrite;
   }
-  for (const file of manifest.content_scripts[1].js) {
-    if (file === 'extension/bridge.js') {
-      bridge.pii.mask = (...args) => { bridgeMaskCalls++; return pii.mask(...args); };
+  const startBridge = () => {
+    for (const file of manifest.content_scripts[1].js) {
+      if (file === 'extension/bridge.js') {
+        bridge.pii.mask = (...args) => { bridgeMaskCalls++; return pii.mask(...args); };
+      }
+      vm.runInContext(fs.readFileSync(file, 'utf8'), bridge, { filename: file });
     }
-    vm.runInContext(fs.readFileSync(file, 'utf8'), bridge, { filename: file });
-  }
-  return { page: pageWindow, requests, messages, postMessages, runtimeRequests, importedExtractable, toasts, deliver, sessionStore, sendWorker, restartBackground, advanceTime: ms => { now += ms; }, runUnmaskTimers: async () => { for (const timer of unmaskTimers.splice(0)) { if (timer.at <= now) await timer.fn(); else unmaskTimers.push(timer); } }, installed: details => installedListener(details), mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
+  };
+  if (!handshake.deferredBridge) startBridge();
+  const advanceHandshake = async ms => {
+    const end = now + ms;
+    while (true) {
+      await delay();
+      handshakeTimers.sort((a, b) => a.at - b.at);
+      const index = handshakeTimers.findIndex(timer => !timer.cancelled && timer.at <= end);
+      if (index < 0) break;
+      const timer = handshakeTimers.splice(index, 1)[0];
+      now = timer.at;
+      await timer.fn();
+    }
+    now = end;
+    await delay();
+  };
+  return { startBridge, advanceHandshake, page: pageWindow, requests, messages, postMessages, runtimeRequests, importedExtractable, toasts, deliver, sessionStore, sendWorker, restartBackground, advanceTime: ms => { now += ms; }, runUnmaskTimers: async () => { for (const timer of unmaskTimers.splice(0)) { if (timer.at <= now) await timer.fn(); else unmaskTimers.push(timer); } }, installed: details => installedListener(details), mutate: muts => bridgeObserver(muts), get bridgeMaskCalls() { return bridgeMaskCalls; } };
 };
 
 (async () => {
+  const handshakeBody = JSON.stringify({ prompt: 'late@example.com' });
+  const checkHandshake = async ext => {
+    await ext.page.fetch('/backend-api/conversation', { method: 'POST', body: handshakeBody });
+    assert.strictEqual(ext.requests.length, 1);
+    assert(!ext.requests[0].init.body.includes('late@example.com'));
+    assert(ext.requests[0].init.body.includes('__PII_EMAIL_'));
+  };
+  const delayedBridge = extension({}, {}, false, false, false, { fakeTimers: true, deferredBridge: true });
+  const waitingRequest = delayedBridge.page.fetch('/backend-api/conversation', { method: 'POST', body: handshakeBody });
+  await delayedBridge.advanceHandshake(1000);
+  assert.strictEqual(delayedBridge.requests.length, 0);
+  delayedBridge.startBridge();
+  await delayedBridge.advanceHandshake(250);
+  await waitingRequest;
+  assert(!delayedBridge.requests[0].init.body.includes('late@example.com'));
+  assert(delayedBridge.messages.some(data => data.type === 'mask2ai-port-request'));
+
+  const droppedReady = extension({}, {}, false, false, false, { fakeTimers: true, dropReady: () => true });
+  await droppedReady.advanceHandshake(3000);
+  await checkHandshake(droppedReady);
+  assert(droppedReady.messages.some(data => data.type === 'mask-request'));
+  assert.strictEqual(droppedReady.messages.filter(data => data.type === 'mask2ai-ready').length >= 5, true);
+
+  const veryLateBridge = extension({}, {}, false, false, false, { fakeTimers: true, deferredBridge: true });
+  const fallbackWaiting = veryLateBridge.page.fetch('/backend-api/conversation', { method: 'POST', body: handshakeBody });
+  await veryLateBridge.advanceHandshake(3000);
+  assert.strictEqual(veryLateBridge.requests.length, 0);
+  veryLateBridge.startBridge();
+  await veryLateBridge.advanceHandshake(250);
+  await fallbackWaiting;
+  assert(!veryLateBridge.requests[0].init.body.includes('late@example.com'));
+  assert(veryLateBridge.messages.some(data => data.type === 'mask-request'));
+
+  const lostConfig = extension({}, {}, false, false, false, { fakeTimers: true, dropConfig: true });
+  await lostConfig.advanceHandshake(0);
+  await checkHandshake(lostConfig);
+
+  const allAcksLost = extension({}, {}, false, false, false, { fakeTimers: true, dropAck: () => true });
+  await allAcksLost.advanceHandshake(3000);
+  await checkHandshake(allAcksLost);
+  assert(allAcksLost.messages.some(data => data.type === 'mask-request'));
+
+  let lostAck = true;
+  const droppedAck = extension({}, {}, false, false, false, { fakeTimers: true, dropAck: () => { const drop = lostAck; lostAck = false; return drop; } });
+  await droppedAck.advanceHandshake(500);
+  await checkHandshake(droppedAck);
+  assert(!droppedAck.messages.some(data => data.type === 'mask-request'));
+  assert.strictEqual(droppedAck.messages.filter(data => data.type === 'mask2ai-ready').length, 2);
+
+  let lostReady = true;
+  const recoveredReady = extension({}, {}, false, false, false, { fakeTimers: true, dropReady: () => { const drop = lostReady; lostReady = false; return drop; } });
+  await recoveredReady.advanceHandshake(250);
+  await checkHandshake(recoveredReady);
+  assert(!recoveredReady.messages.some(data => data.type === 'mask-request'));
+
   const restorePlaceholder = '__PII_EMAIL_abcdef123456__';
   const restore = extension({}, { aliasMap: { [restorePlaceholder]: 'late@example.com' } }, false, false, true);
   const textNode = data => ({ nodeType: 3, data, parentElement: { closest: () => false } });

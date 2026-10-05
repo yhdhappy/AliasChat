@@ -104,6 +104,25 @@ const visionRegressions = () => {
   assert.strictEqual(noVision.binary(), null);
   assert.strictEqual(fs.readFileSync(marker, 'utf8'), recorded);
   console.log('hook unavailable vision blocks PDF and image reads ok');
+  const recovery = noVision.run(readInput(path.join(root, 'uninspected.png'))).hookSpecificOutput.permissionDecisionReason;
+  assert(recovery.includes(marker));
+  assert(recovery.includes('xcode-select --install'));
+  assert(recovery.includes('resend the prompt or retry the Read'));
+  const unsupportedScratch = path.join(root, 'unsupported-scratch');
+  fs.mkdirSync(path.join(unsupportedScratch, 'images'), { recursive: true });
+  fs.writeFileSync(path.join(unsupportedScratch, 'images', 'paste.png'), 'mock');
+  const unsupportedInput = { hook_event_name: 'UserPromptSubmit', session_id: 'unsupported', prompt: 'Inspect', scratchpad_dir: unsupportedScratch };
+  for (let i = 0; i < 2; i++) {
+    const output = noVision.run(unsupportedInput);
+    assert.strictEqual(output.decision, 'block');
+    assert.strictEqual(output.suppressOriginalPrompt, true);
+    assert(output.reason.includes('blocked pasted image paste.png'));
+    assert(output.reason.includes('macOS'));
+  }
+  assert(!fs.existsSync(path.join(unavailable, 'unsupported.images')));
+  const hooks = JSON.parse(fs.readFileSync(path.join(__dirname, 'hooks/hooks.json'), 'utf8')).hooks;
+  for (const event of ['UserPromptSubmit', 'PreToolUse']) assert(hooks[event][0].hooks[0].timeout > 120);
+
 
   const cached = path.join(root, 'vision-cached');
   let attempts = 0;
@@ -120,20 +139,32 @@ const visionRegressions = () => {
   assert.strictEqual(harness(cached, { exec: compiler }).binary(), null);
   assert.strictEqual(attempts, 1);
   assert.strictEqual(JSON.parse(fs.readFileSync(failureFile)).timestamp, timestamp);
-  fs.writeFileSync(failureFile, JSON.stringify({ timestamp: Date.now() - 24 * 60 * 60 * 1000 - 1 }));
+  fs.rmSync(failureFile);
   assert.strictEqual(harness(cached, { exec: compiler }).binary(), null);
   assert.strictEqual(attempts, 2);
-  fs.writeFileSync(failureFile, JSON.stringify({ timestamp: Date.now() - 24 * 60 * 60 * 1000 - 1 }));
+  fs.writeFileSync(failureFile, JSON.stringify({ timestamp: Date.now() - 5 * 60 * 1000 - 1 }));
+  assert.strictEqual(harness(cached, { exec: compiler }).binary(), null);
+  assert.strictEqual(attempts, 3);
+  fs.writeFileSync(failureFile, JSON.stringify({ timestamp: Date.now() - 5 * 60 * 1000 - 1 }));
   const successful = harness(cached, { exec: (command, args) => {
     attempts++;
     readyVision(cached);
   } });
   assert.strictEqual(successful.binary(), path.join(cached, 'vision'));
-  assert.strictEqual(attempts, 3);
+  assert.strictEqual(attempts, 4);
   assert(!fs.existsSync(failureFile));
   fs.writeFileSync(failureFile, JSON.stringify({ timestamp: Date.now() }));
   assert.strictEqual(harness(cached).binary(), path.join(cached, 'vision'));
-  console.log('hook compiler failure cached across invocations for 24h and success reused ok (mock)');
+  console.log('hook compiler failure cached across invocations for five minutes and success reused ok (mock)');
+
+  fs.writeFileSync(failureFile, JSON.stringify({ timestamp: Date.now() }));
+  assert.strictEqual(harness(cached).binary(), path.join(cached, 'vision'));
+  const old = new Date(0);
+  fs.utimesSync(path.join(cached, 'vision'), old, old);
+  let rebuilt = false;
+  const stale = harness(cached, { exec: () => { rebuilt = true; readyVision(cached); } });
+  assert.strictEqual(stale.binary(), path.join(cached, 'vision'));
+  assert(rebuilt, 'An existing outdated binary must bypass the failure cache and rebuild');
 
   const traversal = path.join(dir, 'reads', 'vision-test') + '/../../outside.pdf';
   const containment = harness(dir);
@@ -156,7 +187,7 @@ const visionRegressions = () => {
     const hook = harness(pastedDir, { exec: (command, args) => {
       if (args[0] === 'ocr') scans++;
       if (args[0] === mode && !failed) { failed = true; throw new Error(`${mode} interrupted`); }
-      if (args[0] === 'ocr') return ocr;
+      if (args[0] === 'ocr') return args[1].includes('-redacted.') ? '[]' : ocr;
       fs.writeFileSync(args[2], 'redacted');
       return '';
     } });
@@ -170,9 +201,13 @@ const visionRegressions = () => {
     assert.strictEqual(retry.decision, 'block');
     assert(retry.reason.includes('personal data found in a pasted image'));
     assert.strictEqual(scans, 2);
-    assert.strictEqual(fs.readFileSync(seen, 'utf8'), image + '\n');
+    assert(!fs.existsSync(seen));
+    assert.strictEqual(hook.run(input).decision, 'block');
+    assert.strictEqual(scans, 4);
+    assert(!fs.readFileSync(seen, 'utf8').includes(image + '\n'));
+    fs.rmSync(image);
     assert.strictEqual(hook.run(input), null);
-    assert.strictEqual(scans, 2);
+    assert.strictEqual(scans, 4);
     const cleanImage = path.join(scratch, 'images', 'clean.png');
     fs.writeFileSync(cleanImage, 'mock');
     let cleanScans = 0;

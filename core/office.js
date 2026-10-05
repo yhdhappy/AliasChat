@@ -10,6 +10,7 @@
   const WORKSHEETS = /^xl\/worksheets\/sheet\d+\.xml$/;
   const XML_CELL = /(<c\b(?![^>]*\/>)[^>]*>)([\s\S]*?)(<\/c>)/g;
   const XML_NUMBER = /<v>(\d+)<\/v>/g;
+  const XML_VALUE = /(<v(?:\s[^>]*)?>)([^<]*)(<\/v>)/g;
   const PROPERTY_TEXT = /(<([\w:.-]+)(?:\s[^>]*)?>)([^<]*)(<\/\2>)/g;
   const XML_TEXT = /(<(?:w:t|w:delText|w:instrText|t|a:t)(?:\s[^>]*)?>)([^<]*)(<\/(?:w:t|w:delText|w:instrText|t|a:t)>)/g;
   const decode = s => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
@@ -31,7 +32,13 @@
         : WORKSHEETS.test(e.name) ? xml : xml.replace(XML_TEXT, (m, open, text, close) => replaceText(m, open, text, close));
       if (WORKSHEETS.test(e.name)) {
         out = out.replace(XML_CELL, (cell, open, content, close) => {
-          if (/<f\b/.test(content)) return cell;
+          if (/<f\b/.test(content)) {
+            const masked = content.replace(XML_VALUE, (m, open, text, close) => replaceText(m, open, text, close));
+            if (masked === content) return cell;
+            const type = open.match(/\bt\s*=\s*(["'])(.*?)\1/);
+            const textOpen = type ? open.replace(type[0], 't="str"') : open.slice(0, -1) + ' t="str">';
+            return textOpen + masked + close;
+          }
           content = content.replace(XML_TEXT, (m, open, text, close) => replaceText(m, open, text, close));
           const type = open.match(/\bt\s*=\s*(["'])(.*?)\1/);
           if (type && type[2] !== 'n') return open + content + close;

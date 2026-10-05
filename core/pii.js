@@ -48,21 +48,21 @@
     ['EMAIL', /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}/g],
     ['SECRET', /(?<![\w-])(?:gh[po]_[A-Za-z0-9]{20,}|github_pat_\w{20,}|sk-[A-Za-z0-9-]{20,}|eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})(?![\w-])/g],
     ['IBAN', /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/g, iban],
-    ['PHONE_CN', /(?<!\+)\b1[3-9]\d(?:\d{8}| \d{4} \d{4})\b/g],
+    ['PHONE_CN', /(?<!\+)\b1[3-9]\d(?:[ -]?\d{4}){2}\b/g],
     ['ID_CN', /\b[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b/g, chineseId],
     ['CARD_CN', /\b62\d{14,17}\b/g, luhn],
     ['CARD', /\b[2-6]\d{14,15}\b|\b[2-6]\d{3}(?:[ -]\d{4}){3}\b|\b[2-6]\d{3}[ -]\d{6}[ -]\d{5}\b/g, luhn],
     ['SSN', /\b\d{3}-\d{2}-\d{4}\b/g, ssn],
     ['PHONE', /(?:\+|\b00)\d{1,3}[ .-]?\(?\d{1,4}\)?(?:[ .-]?\d{2,4}){2,4}\b|\(\d{3}\)[ .-]?\d{3}[ .-]?\d{4}\b|\b\d{3}[.-]\d{3}[.-]\d{4}\b|\b0\d{4} ?\d{6}\b/g, s => !/^\d{3}-\d{2}-\d{4}$/.test(s)],
-    ['ADDRESS', /(?<![\p{L}_])(?:address|addr|street[ _-]?address|billing[ _-]?address|shipping[ _-]?address|home[ _-]?address)\s*["']?\s*[:=]\s*["']?([^\n"']{8,120}?)\s*(?=[\n"']|$)/giu, addressLike],
+    ['ADDRESS', /(?<![\p{L}_])(?:address|addr|street[ _-]?address|billing[ _-]?address|shipping[ _-]?address|home[ _-]?address)\s{0,20}(?:["']\s{0,20})?[:=]\s{0,20}["']?([^\n"']{8,120}?)\s{0,20}(?=[\n"']|$)/giu, addressLike],
     ['ADDRESS', /\b\d{1,5}[A-Za-z]?\s+(?:[A-Z][a-z]+\.?\s+){1,3}(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Way|Place|Pl|Highway|Hwy|Parkway|Pkwy)\b\.?(?:,?\s*(?:Apt|Suite|Ste|Unit|Floor|Fl|#)\.?\s*[\w-]+)?(?:,\s*[A-Z][a-z]+(?:\s[A-Z][a-z]+)*)?(?:,?\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?|\s+[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})?|\bP\.?O\.?\s*Box\s+\d+\b/g],
-    ['DOB', /(?<![\p{L}_])(?:dob|date of birth|birth ?date|born(?: on)?|d\.?t\.?)\s*["']?\s*[:=]?\s*["']?(\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}-\d{2}-\d{2})/giu],
-    ['ID', /(?<![\p{L}_])(?:passport(?: no| number)?|id(?: number| no)|national id|driver'?s licen[cs]e)\s*["']?\s*[:=]?\s*["']?([A-Z]{0,2}\d{6,11}[A-Z]?)(?![\d\p{L}])/giu],
+    ['DOB', /(?<![\p{L}_])(?:dob|date of birth|birth ?date|born(?: on)?|d\.?t\.?)\s{0,20}(?:["']\s{0,20})?(?:[:=]\s{0,20})?["']?(\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}-\d{2}-\d{2})/giu],
+    ['ID', /(?<![\p{L}_])(?:passport(?: no| number)?|id(?: number| no)|national id|driver'?s licen[cs]e)\s{0,20}(?:["']\s{0,20})?(?:[:=]\s{0,20})?["']?([A-Z]{0,2}\d{6,11}[A-Z]?)(?![\d\p{L}])/giu],
     ['IP', /(?<!version\s)(?<!\bv)\b(?!(?:10|127|0)\.)(?!192\.168\.)(?!172\.(?:1[6-9]|2\d|3[01])\.)(?!169\.254\.)(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/g],
-    ['NAME', /(?<!\p{L})(?:[Mm]y name is|I am|I'm|[Dd]ear|[Rr]egards|[Ss]incerely|[Bb]est regards|[Kk]ind regards|[Cc]heers)\s*,?\s+(\p{Lu}\p{Ll}+(?:\s+\p{Lu}\p{Ll}+){1,2})/gu],
-    ['NAME', /(?<!\p{L})(?:Mr|Mrs|Ms|Miss|Dr|Prof)\.?\s+(\p{Lu}\p{Ll}+(?:\s+\p{Lu}\p{Ll}+){0,2})/gu],
-    ['NAME', /(?<![\p{L}_])(?:first[ _-]?name|last[ _-]?name|given[ _-]?name|family[ _-]?name|surname)\s*["']?\s*[:=]\s*["']?([^\n,;"']{2,60}?)\s*(?=[\n,;"']|$)/giu, personLike],
-    ['NAME', /(?<![\p{L}_])(?:full[ _-]?name|customer(?:[ _-]?name)?|contact(?:[ _-]?name)?|owner|patient|employee|name)\s*["']?\s*[:=]\s*["']?([^\n,;"']{2,60}?)\s*(?=[\n,;"']|$)/giu, fullNameLike]
+    ['NAME', /(?<!\p{L})(?:[Mm]y name is|I am|I'm|[Dd]ear|[Rr]egards|[Ss]incerely|[Bb]est regards|[Kk]ind regards|[Cc]heers)(?:\s{0,20},)?\s{1,20}(\p{Lu}\p{Ll}+(?:\s{1,20}\p{Lu}\p{Ll}+){1,2})/gu],
+    ['NAME', /(?<!\p{L})(?:Mr|Mrs|Ms|Miss|Dr|Prof)\.?\s{1,20}(\p{Lu}\p{Ll}+(?:\s{1,20}\p{Lu}\p{Ll}+){0,2})/gu],
+    ['NAME', /(?<![\p{L}_])(?:first[ _-]?name|last[ _-]?name|given[ _-]?name|family[ _-]?name|surname)\s{0,20}(?:["']\s{0,20})?[:=]\s{0,20}["']?([^\n,;"']{2,60}?)\s{0,20}(?=[\n,;"']|$)/giu, personLike],
+    ['NAME', /(?<![\p{L}_])(?:full[ _-]?name|customer(?:[ _-]?name)?|contact(?:[ _-]?name)?|owner|patient|employee|name)\s{0,20}(?:["']\s{0,20})?[:=]\s{0,20}["']?([^\n,;"']{2,60}?)\s{0,20}(?=[\n,;"']|$)/giu, fullNameLike]
   ];
   const nameForms = t => {
     const l = [...t.toLowerCase()];
