@@ -64,7 +64,7 @@ Tick all three certifications: not sold to third parties, not used for purposes 
 ## Assets to upload
 
 - Icon 128×128: `store/icon-128.png` (96px artwork with 16px transparent padding, as the store asks)
-- Screenshots 1280×800: `store/shot-1-wire.png` (what ChatGPT received), `store/shot-2-restored.png` (what you see). Rendered from frames of `demo/chatgpt-web.gif`; regenerate when the recording changes
+- Screenshots 1280×800: `store/shot-1-wire.png` (what ChatGPT received), `store/shot-2-restored.png` (what you see), `store/shot-1-aliaschat.png` (masking toast), `store/shot-2-aliaschat.png` (chat thread). Redrawn 2026-10-05 with AliasChat branding
 - Small promo tile 440×280: `store/promo-440x280.png` (logo and one placeholder example, no headline)
 
 ## Package
