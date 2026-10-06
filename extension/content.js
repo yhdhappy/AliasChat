@@ -90,7 +90,7 @@
   const openOptions = () => window.postMessage({ type: 'mask2ai-open-options', token }, location.origin);
   const failure = error => {
     if (error && ['opaque-blocked', 'unknown-blocked', 'encoding-blocked'].includes(error.code)) {
-      show('已取消上传：这是 AliasChat 拦截的，不是网络问题。点击打开设置。/ Upload cancelled by AliasChat, not a network problem. Click to open settings.', 12000, openOptions);
+      show('Upload cancelled by AliasChat, not a network problem. Click to open settings.', 12000, openOptions);
       return;
     }
     show(error?.code === 'map-storage-error'

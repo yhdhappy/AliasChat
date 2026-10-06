@@ -773,7 +773,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   failedXhr.send(body);
   await until(() => failed);
   assert.strictEqual(badConfig.requests.length, 0);
-  const opaqueToast = '🛡 AliasChat: 已取消上传：这是 AliasChat 拦截的，不是网络问题。点击打开设置。/ Upload cancelled by AliasChat, not a network problem. Click to open settings.';
+  const opaqueToast = '🛡 AliasChat: Upload cancelled by AliasChat, not a network problem. Click to open settings.';
   const blockedUpload = extension();
   const pdf = new File(['%PDF-1.7'], 'private.pdf', { type: 'application/pdf' });
   const pdfForm = new FormData();
@@ -805,7 +805,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   const onceUpload = dialogAllow.page.fetch(url, { method: 'POST', body: onceForm });
   await until(() => dialogAllow.dialogOverlay);
   assert(dialogText(dialogAllow).includes('once.pdf'));
-  assert(dialogText(dialogAllow).includes('不是网络问题'));
+  assert(dialogText(dialogAllow).includes('not a network problem'));
   dialogAllow.clickDialogButton('allow');
   await onceUpload;
   assert.strictEqual(dialogAllow.requests.length, 1);
@@ -819,7 +819,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
   dialogCancel.clickDialogButton('cancel');
   await assert.rejects(cancelUpload, error => error.code === 'opaque-blocked');
   assert.strictEqual(dialogCancel.requests.length, 0);
-  assert(dialogCancel.toasts.some(text => text.includes('不是网络问题')));
+  assert(dialogCancel.toasts.some(text => text.includes('not a network problem')));
   const optExt = extension();
   const configMsg = optExt.postMessages.find(message => message.data.type === 'mask2ai-config');
   assert(configMsg && /^[0-9a-f]{64}$/.test(configMsg.data.token));
@@ -844,7 +844,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     assert(allowedUnknown.toasts.some(text => text.includes('uploaded uninspected')));
   }
   assert.strictEqual(unknownUpload.requests.length, 0);
-  assert(unknownUpload.toasts.every(text => text.includes('不是网络问题')));
+  assert(unknownUpload.toasts.every(text => text.includes('not a network problem')));
   const namedUpload = new FormData();
   namedUpload.append('file', new File(['%PDF-1.7'], 'John_Smith_passport.pdf'));
   await allowedUpload.page.fetch(url, { method: 'POST', body: namedUpload });
@@ -906,7 +906,7 @@ const extension = (config = {}, sessionStore = {}, failDigests = false, failFirs
     const invalidEncoding = extension();
     await assert.rejects(invalidEncoding.page.fetch(url, { method: 'POST', body: new File([bytes], 'legacy.csv') }), error => error.code === 'encoding-blocked');
     assert.strictEqual(invalidEncoding.requests.length, 0);
-    assert(invalidEncoding.toasts.some(text => text.includes('不是网络问题')));
+    assert(invalidEncoding.toasts.some(text => text.includes('not a network problem')));
     const allowedEncoding = extension({ allowUnknownUploads: true });
     await allowedEncoding.page.fetch(url, { method: 'POST', body: new File([bytes], 'legacy.csv') });
     assert.deepStrictEqual(new Uint8Array(await allowedEncoding.requests[0].init.body.arrayBuffer()), bytes);

@@ -47,18 +47,9 @@
   const packFile = async file => ({ bytes: await file.arrayBuffer(), name: file.name, type: file.type, lastModified: file.lastModified });
   const BLOCK_CODES = ['opaque-blocked', 'unknown-blocked', 'encoding-blocked'];
   const BLOCK_TEXT = {
-    'opaque-blocked': {
-      zh: '浏览器无法检查图片 / PDF 文件里的内容，其中可能藏有个人信息（比如证件、手机号截图）。',
-      en: 'The browser cannot inspect images or PDFs, which may contain personal data.'
-    },
-    'unknown-blocked': {
-      zh: '这种文件浏览器无法检查内容，其中可能藏有个人信息。',
-      en: 'This file type cannot be inspected in the browser and may contain personal data.'
-    },
-    'encoding-blocked': {
-      zh: '这个文本文件的编码无法安全识别，里面的内容可能无法正确检查。',
-      en: 'This text file\u2019s encoding cannot be decoded safely, so its contents cannot be inspected.'
-    }
+    'opaque-blocked': 'The browser cannot inspect images or PDFs, which may contain personal data.',
+    'unknown-blocked': 'This file type cannot be inspected in the browser and may contain personal data.',
+    'encoding-blocked': 'This text file\u2019s encoding cannot be decoded safely, so its contents cannot be inspected.'
   };
   const confirmUpload = (fileName, code) => new Promise(resolve => {
     let settled = false;
@@ -83,10 +74,10 @@
       box.style.cssText = 'background:#fff;color:#1c1b18;border-radius:12px;padding:22px 24px;max-width:27rem;margin:16px;box-shadow:0 12px 40px rgba(0,0,0,.4);';
       const title = document.createElement('div');
       title.style.cssText = 'font-size:16px;font-weight:700;margin-bottom:8px;';
-      title.textContent = '🛡 AliasChat 已拦截此次上传 · Upload blocked';
+      title.textContent = '🛡 Upload blocked by AliasChat';
       const body = document.createElement('div');
       body.style.cssText = 'color:#444;margin-bottom:4px;';
-      body.textContent = text.zh + '这次上传已被拦下——不是网络问题，无需检查网络。 ' + text.en + ' This upload was blocked to protect you; it is not a network problem.';
+      body.textContent = text + ' This upload was blocked to protect you; it is not a network problem.';
       const name = document.createElement('div');
       name.style.cssText = 'font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#777;margin:8px 0 16px;word-break:break-all;';
       name.textContent = fileName;
@@ -102,10 +93,10 @@
         button.addEventListener('click', () => finish(action === 'allow'));
         return button;
       };
-      row.appendChild(mkButton('取消 · Cancel', false, 'cancel'));
-      row.appendChild(mkButton('这次仍要上传 · Upload once', true, 'allow'));
+      row.appendChild(mkButton('Cancel', false, 'cancel'));
+      row.appendChild(mkButton('Upload once', true, 'allow'));
       const link = document.createElement('button');
-      link.textContent = '在设置中改为全部放行 · Allow all in options →';
+      link.textContent = 'Allow all in options →';
       link.style.cssText = 'border:none;background:none;color:#6b21a8;padding:0;margin-top:14px;font:13px/1.5 system-ui,sans-serif;cursor:pointer;text-decoration:underline;';
       link.addEventListener('click', () => {
         try { chrome.runtime.openOptionsPage(); } catch {}
