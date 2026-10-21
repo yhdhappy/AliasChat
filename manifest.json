@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AliasChat",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "AliasChat masks personal data before your message reaches claude.ai or ChatGPT, then restores real values on screen.",
   "minimum_chrome_version": "111",
   "icons": {
