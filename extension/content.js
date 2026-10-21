@@ -1,84 +1,163 @@
 (() => {
   const { isChatRequest, isUploadMetadataRequest } = window.piiRewrite;
+  // Subframes have no line to the isolated bridge; they relay masking RPCs
+  // through the top frame over a MessagePort. The PII map never leaves the
+  // isolated world.
+  const inSubframe = (() => { try { return window !== window.top; } catch { return true; } })();
   const requestPrefix = [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
   const pending = new Map();
-  const channels = [];
-  let contentPort;
-  let attempts = 0;
-  let handshakeTimer;
-  let finishHandshake;
-  const transportReady = new Promise(resolve => { finishHandshake = resolve; });
-  let token;
   let sequence = 0;
-  let acceptConfig;
-  const ready = new Promise(resolve => { acceptConfig = resolve; });
+  let token;
   const hasPlaceholder = text => /__PII_[A-Z_]+_(?:[0-9a-f]{12}|[0-9a-f]{6})__/.test(text);
-  window.addEventListener('message', e => {
-    const data = e.data;
-    if (!data || typeof data !== 'object') return;
-    if (data.type === 'mask2ai-port-request') {
-      if (!contentPort && attempts < 5) offerPort();
-      else window.postMessage({ type: 'mask2ai-ready' }, location.origin);
-      return;
-    }
-    if (data.type === 'mask2ai-config') {
-      if (token || typeof data.token !== 'string' || !/^[0-9a-f]{64}$/.test(data.token)) return;
-      // First config wins. Page scripts can observe the token, preempt this handshake, or forge RPC traffic; postMessage cannot authenticate the isolated bridge.
-      token = data.token;
-      acceptConfig();
-      return;
-    }
-    if (data.token !== token || data.type !== 'mask-result') return;
-    const request = pending.get(data.id);
-    if (!request || request.type !== data.type) return;
-    pending.delete(data.id);
-    clearTimeout(request.timer);
-    data.error ? request.reject(Object.assign(new Error(data.error), { code: data.code })) : request.resolve(data.result);
-  });
-  const offerPort = () => {
-    clearTimeout(handshakeTimer);
-    const channel = new MessageChannel();
-    channels.push(channel.port1);
-    channel.port1.onmessage = event => {
-      if (event.data?.type !== 'mask2ai-port-ack' || contentPort) return;
-      if (!token && typeof event.data.token === 'string' && /^[0-9a-f]{64}$/.test(event.data.token)) {
-        token = event.data.token;
+  let rpc;
+
+  if (!inSubframe) {
+    const channels = [];
+    let contentPort;
+    let attempts = 0;
+    let handshakeTimer;
+    let finishHandshake;
+    const transportReady = new Promise(resolve => { finishHandshake = resolve; });
+    let acceptConfig;
+    const ready = new Promise(resolve => { acceptConfig = resolve; });
+    window.addEventListener('message', e => {
+      const data = e.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'mask2ai-relay-connect' && e.ports && e.ports[0]) {
+        const relayPort = e.ports[0];
+        relayPort.onmessage = event => {
+          const msg = event.data;
+          if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return;
+          if (msg.type === 'mask2ai-relay-close') { try { relayPort.close(); } catch {} return; }
+          if (typeof msg.id !== 'string') return;
+          const { type, id, timeoutMs, ...payload } = msg;
+          rpc(type, payload, typeof timeoutMs === 'number' ? timeoutMs : 10000).then(
+            result => { try { relayPort.postMessage({ type: 'mask2ai-relay-result', id, result }); } catch {} },
+            error => { try { relayPort.postMessage({ type: 'mask2ai-relay-result', id, error: (error && error.message) || 'AliasChat could not process personal data safely', code: error && error.code }); } catch {} }
+          );
+        };
+        try { relayPort.start(); } catch {}
+        try { relayPort.postMessage({ type: 'mask2ai-relay-ack' }); } catch {}
+        return;
+      }
+      if (data.type === 'mask2ai-port-request') {
+        if (!contentPort && attempts < 5) offerPort();
+        else window.postMessage({ type: 'mask2ai-ready' }, location.origin);
+        return;
+      }
+      if (data.type === 'mask2ai-config') {
+        if (token || typeof data.token !== 'string' || !/^[0-9a-f]{64}$/.test(data.token)) return;
+        // First config wins. Page scripts can observe the token, preempt this handshake, or forge RPC traffic; postMessage cannot authenticate the isolated bridge.
+        token = data.token;
         acceptConfig();
+        return;
       }
-      contentPort = channel.port1;
-      clearTimeout(handshakeTimer);
-      for (const port of channels) if (port !== contentPort) port.close();
-      finishHandshake();
-    };
-    attempts++;
-    window.postMessage({ type: 'mask2ai-ready' }, location.origin, [channel.port2]);
-    handshakeTimer = setTimeout(() => {
-      if (contentPort) return;
-      if (attempts < 5) offerPort();
-      else {
-        window.postMessage({ type: 'mask2ai-ready' }, location.origin);
-        finishHandshake();
-      }
-    }, 500);
-  };
-  offerPort();
-  const rpc = (type, payload, timeoutMs = 10000) => new Promise((resolve, reject) => {
-    const id = requestPrefix + ':' + ++sequence;
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error('AliasChat bridge did not respond'));
-    }, timeoutMs);
-    pending.set(id, { resolve, reject, timer, type: type.replace('-request', '-result') });
-    Promise.all([ready, transportReady]).then(() => {
-      if (!pending.has(id)) return;
-      const data = { type, token, id, ...payload };
-      if (contentPort) contentPort.postMessage(data);
-      else window.postMessage(data, location.origin);
+      if (data.token !== token || data.type !== 'mask-result') return;
+      const request = pending.get(data.id);
+      if (!request || request.type !== data.type) return;
+      pending.delete(data.id);
+      clearTimeout(request.timer);
+      data.error ? request.reject(Object.assign(new Error(data.error), { code: data.code })) : request.resolve(data.result);
     });
-  });
+    const offerPort = () => {
+      clearTimeout(handshakeTimer);
+      const channel = new MessageChannel();
+      channels.push(channel.port1);
+      channel.port1.onmessage = event => {
+        if (event.data?.type !== 'mask2ai-port-ack' || contentPort) return;
+        if (!token && typeof event.data.token === 'string' && /^[0-9a-f]{64}$/.test(event.data.token)) {
+          token = event.data.token;
+          acceptConfig();
+        }
+        contentPort = channel.port1;
+        clearTimeout(handshakeTimer);
+        for (const port of channels) if (port !== contentPort) port.close();
+        finishHandshake();
+      };
+      attempts++;
+      window.postMessage({ type: 'mask2ai-ready' }, location.origin, [channel.port2]);
+      handshakeTimer = setTimeout(() => {
+        if (contentPort) return;
+        if (attempts < 5) offerPort();
+        else {
+          window.postMessage({ type: 'mask2ai-ready' }, location.origin);
+          finishHandshake();
+        }
+      }, 500);
+    };
+    offerPort();
+    rpc = (type, payload, timeoutMs = 10000) => new Promise((resolve, reject) => {
+      const id = requestPrefix + ':' + ++sequence;
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error('AliasChat bridge did not respond'));
+      }, timeoutMs);
+      pending.set(id, { resolve, reject, timer, type: type.replace('-request', '-result') });
+      Promise.all([ready, transportReady]).then(() => {
+        if (!pending.has(id)) return;
+        const data = { type, token, id, ...payload };
+        if (contentPort) contentPort.postMessage(data);
+        else window.postMessage(data, location.origin);
+      });
+    });
+  } else {
+    let relayPort;
+    let relayAttempts = 0;
+    const relayReady = new Promise((resolve, reject) => {
+      const connect = () => {
+        if (relayPort) return;
+        if (relayAttempts >= 5) { reject(new Error('AliasChat bridge did not respond')); return; }
+        relayAttempts++;
+        const channel = new MessageChannel();
+        channel.port1.onmessage = event => {
+          const data = event.data;
+          if (!data || typeof data !== 'object') return;
+          if (data.type === 'mask2ai-relay-ack') {
+            if (!relayPort) { relayPort = channel.port1; resolve(); }
+            else { try { channel.port1.postMessage({ type: 'mask2ai-relay-close' }); } catch {} try { channel.port1.close(); } catch {} }
+            return;
+          }
+          if (data.type === 'mask2ai-relay-result' && typeof data.id === 'string') {
+            const request = pending.get(data.id);
+            if (!request) return;
+            pending.delete(data.id);
+            clearTimeout(request.timer);
+            data.error ? request.reject(Object.assign(new Error(data.error), { code: data.code })) : request.resolve(data.result);
+          }
+        };
+        try { channel.port1.start(); } catch {}
+        try { window.top.postMessage({ type: 'mask2ai-relay-connect' }, '*', [channel.port2]); }
+        catch { /* top frame unreachable; will retry */ }
+        setTimeout(connect, 500);
+      };
+      connect();
+    });
+    relayReady.catch(() => {});
+    rpc = (type, payload, timeoutMs = 10000) => new Promise((resolve, reject) => {
+      const id = requestPrefix + ':' + ++sequence;
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error('AliasChat bridge did not respond'));
+      }, timeoutMs);
+      pending.set(id, { resolve, reject, timer });
+      const fail = () => {
+        if (!pending.has(id)) return;
+        pending.delete(id);
+        clearTimeout(timer);
+        reject(new Error('AliasChat bridge did not respond'));
+      };
+      relayReady.then(() => {
+        if (!pending.has(id) || !relayPort) return fail();
+        try { relayPort.postMessage({ type, id, timeoutMs, ...payload }); }
+        catch { fail(); }
+      }, fail);
+    });
+  }
 
   const style = 'position:fixed;z-index:2147483647;font:13px/1.4 system-ui,sans-serif;color:#fff;background:#6b21a8;border-radius:8px;padding:6px 10px;box-shadow:0 2px 8px rgba(0,0,0,.3);pointer-events:none;';
-  const show = (text, ms, onClick) => {
+  // Subframes stay silent (usually hidden utility frames); requests still fail
+  // closed (blocked, never leaked) when masking is unavailable.
+  const show = inSubframe ? () => {} : (text, ms, onClick) => {
     const el = document.createElement('div');
     el.setAttribute('data-mask2ai', '');
     el.style.cssText = style + 'right:16px;bottom:16px;' + (onClick ? 'pointer-events:auto;cursor:pointer;' : '');
